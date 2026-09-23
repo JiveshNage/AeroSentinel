@@ -23,8 +23,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+from ingestion.routes import router as ingestion_router
+
 # Include API router under API_V1_STR (default /api)
 app.include_router(api_router, prefix=settings.API_V1_STR)
+# Also include direct /ingest route matching architecture.md gateway spec
+app.include_router(ingestion_router)
 
 
 @app.get("/", tags=["Root"])

@@ -23,8 +23,8 @@ After finishing a feature: append to the changelog, flip its status in the Featu
 |---|---|---|---|
 | F0 | Project scaffold | ✅ | Scaffold complete, FastAPI health check + React/Tailwind frontend |
 | F1 | DB schema & migrations | ✅ | SQLAlchemy models for all database.md tables, Alembic migration 56bc0451d50b, 20 seeded stations |
-| F2 | Historical loader + simulator | ⬜ | |
-| F3 | Ingestion API | ⬜ | |
+| F2 | Historical loader + simulator | ✅ | Meteostat loader + telemetry replay simulator with offline diurnal generation |
+| F3 | Ingestion API | ✅ | POST /ingest and /ingest/batch with deduplication, station registry validation, and 409/422 responses |
 | F4 | Rule-based QC layer | ⬜ | |
 | F5 | Fault injection tool | ⬜ | |
 | F6 | Baseline ML scorer (IsolationForest) | ⬜ | |
@@ -43,6 +43,8 @@ After finishing a feature: append to the changelog, flip its status in the Featu
 ## Decision log
 *(Append-only. Each entry: date, decision, why, what alternative was rejected.)*
 
+- `2026-09-23` — Implemented F3 Ingestion API (POST /ingest and POST /ingest/batch) supporting station resolution by code and UUID, deduplication returning 409 Conflict, Pydantic bounds checking, and spoofed station rejection (404). Mounted at both /ingest (matching architecture.md gateway spec) and /api/ingest.
+- `2026-09-23` — Implemented F2 Telemetry Replay Simulator in backend/ingestion/simulator.py with chronological multi-station replay, configurable delay/batching, CSV loader, and built-in diurnal synthetic generator for offline resilience.
 - `2026-09-23` — Implemented all database.md models in backend/storage/models.py using BigIntPK with SQLite Integer variant for multi-engine autoincrement compatibility. Generated initial Alembic migration 56bc0451d50b_create_initial_schema.py. Created idempotent seed script backend/storage/seed.py populating 20 stations with sensor_specs and default operator user.
 - `2026-09-23` — Scaffolded F0 strictly following architecture.md module boundaries (/backend with ingestion, qc, alerts, storage, api, retrain; /frontend with src/pages, src/components, src/api). Used FastAPI with Pydantic settings and React 18 + TypeScript + Vite + Tailwind configured with exact CSS custom properties and IBM Plex typography from design.md.
 - `2026-09-23` — Configured root docker-compose.yml defining timescale/timescaledb:latest-pg15, redis:7-alpine, backend, and frontend with proper healthchecks and dependencies.
@@ -74,6 +76,7 @@ After finishing a feature: append to the changelog, flip its status in the Featu
 ## Changelog
 *(One line per completed feature or significant fix. Newest at top.)*
 
+- `2026-09-23` — F3 & F2 complete: Ingestion API (single/batch, deduplication, validation) and telemetry replay simulator implemented with 21/21 passing backend tests.
 - `2026-09-23` — F1 complete: Database schema, Alembic migration lifecycle, and station seeder (20 stations) implemented with 13/13 passing tests.
 - `2026-09-23` — F0 complete: Scaffolded repo, Docker Compose, FastAPI health check (/api/health), React/Vite dashboard shell with design.md tokens, 5/5 unit tests passing.
 
