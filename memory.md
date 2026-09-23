@@ -27,7 +27,7 @@ After finishing a feature: append to the changelog, flip its status in the Featu
 | F3 | Ingestion API | ✅ | POST /ingest and /ingest/batch with deduplication, station registry validation, and 409/422 responses |
 | F4 | Rule-based QC layer | ✅ | Pure range, step (circular wind direction wrap), and persistence checks with meteorological zero exemptions; DB persistence to qc_results; 21 tests |
 | F5 | Fault injection tool | ✅ | Parameterized fault injector (flatline, spike, drift, dropout, spatial, extreme weather), spotcheck plot reports/injected_faults_spotcheck.png, 11 tests |
-| F6 | Baseline ML scorer (IsolationForest) | ⬜ | |
+| F6 | Baseline ML scorer (IsolationForest) | ✅ | IsolationForest baseline per variable, 6D feature engineering, model registry, benchmark eval report (100% spike, 75% flatline, 58% drift recall) |
 | F7 | Spatial consistency checker | ⬜ | |
 | F8 | Fault classifier (merge layer) | ⬜ | |
 | F9 | LSTM-Autoencoder upgrade | ⬜ | stretch |
@@ -43,6 +43,7 @@ After finishing a feature: append to the changelog, flip its status in the Featu
 ## Decision log
 *(Append-only. Each entry: date, decision, why, what alternative was rejected.)*
 
+- `2026-09-23` — Implemented F6 Baseline ML Anomaly Scorer (Isolation Forest) in backend/qc/ml_scorer.py. Engineered 6D feature vector (value, 1-step delta, rolling mean diff, rolling std, cyclical diurnal hour sin/cos). Serialized StandardScaler with ModelBundle to eliminate train/inference skew. Implemented benchmark evaluator and recorded per-fault-type metrics in reports/model_eval_isolation_forest.json.
 - `2026-09-23` — Implemented F4 Rule-based QC layer in backend/qc/rules.py. Dynamically loads range and step thresholds from station.sensor_specs. Supports circular angular delta for wind_direction wrap around North (0°/360°), and provides physical domain exemptions for dry-weather zero rainfall and nighttime zero solar radiation during persistence checks. Integrated synchronous first-pass QC execution into ingestion service.
 - `2026-09-23` — Implemented F5 Fault Injection Tool in backend/qc/fault_injector.py supporting flatline, spike, drift, and dropout (both physical missing rows and sensor disconnection NaNs, never zero-filled per test.md). Added multi-station labeled benchmark generator and visual 4-panel verification plot in reports/injected_faults_spotcheck.png adhering to design.md palette.
 - `2026-09-23` — Implemented F3 Ingestion API (POST /ingest and POST /ingest/batch) supporting station resolution by code and UUID, deduplication returning 409 Conflict, Pydantic bounds checking, and spoofed station rejection (404). Mounted at both /ingest (matching architecture.md gateway spec) and /api/ingest.
@@ -62,7 +63,7 @@ After finishing a feature: append to the changelog, flip its status in the Featu
 
 | Date | Model | Variable | Precision | Recall | F1 | Notes |
 |---|---|---|---|---|---|---|
-| | | | | | | |
+| 2026-09-23 | IsolationForest (v1.0.0) | temperature | 0.2958 | 0.6364 | 0.4038 | Baseline ML on F5 benchmark: Spikes recall=1.0, Flatlines recall=0.75, Drift recall=0.58. Precision will be boosted by F7 spatial checker and F8 classifier merge layer. |
 
 ## Data sources in use
 - Stations metadata: Dataset/stations.csv (15 NCR stations + 5 additional Indian metropolitan/high-altitude AWS stations)
@@ -78,6 +79,7 @@ After finishing a feature: append to the changelog, flip its status in the Featu
 ## Changelog
 *(One line per completed feature or significant fix. Newest at top.)*
 
+- `2026-09-23` — F6 complete: Baseline ML anomaly scorer (IsolationForest) implemented with 6D feature engineering, model registry versioning, benchmark evaluation (60/60 tests passing total).
 - `2026-09-23` — F4 complete: Rule-based QC layer implemented with range, circular step, and persistence checks, DB persistence to qc_results, and 21 unit/integration tests (53/53 tests passing total).
 - `2026-09-23` — F5 complete: Fault injection tool implemented with 4-panel visual verification plot (reports/injected_faults_spotcheck.png) and 11 unit/adversarial tests (32/32 tests passing total). Concludes Phase 1 per phase.md.
 - `2026-09-23` — F3 & F2 complete: Ingestion API (single/batch, deduplication, validation) and telemetry replay simulator implemented with 21/21 passing backend tests.
@@ -89,7 +91,7 @@ After finishing a feature: append to the changelog, flip its status in the Featu
 When starting a new AI session, paste this filled-in block first:
 
 ```
-Current state: F4 complete. Next is Phase 2: F6 (Baseline ML scorer - IsolationForest).
+Current state: F6 complete. Next is Phase 2: F7 (Spatial consistency checker).
 Known issues: [pull from Known Issues section above]
 Do not re-litigate: [any settled architecture/tech decisions from Decision Log — don't let the AI suggest re-doing these without new evidence]
 ```

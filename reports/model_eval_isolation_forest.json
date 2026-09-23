@@ -1,0 +1,36 @@
+{
+  "model_type": "isolation_forest",
+  "variable": "temperature",
+  "version": "v1.0.0",
+  "total_observations_evaluated": 233,
+  "overall": {
+    "precision": 0.2958,
+    "recall": 0.6364,
+    "f1": 0.4038,
+    "tp": 21,
+    "fp": 50,
+    "fn": 12,
+    "tn": 150
+  },
+  "per_fault_type": {
+    "drift": {
+      "total_injected": 24,
+      "detected": 14,
+      "missed": 10,
+      "recall": 0.5833
+    },
+    "flatline": {
+      "total_injected": 8,
+      "detected": 6,
+      "missed": 2,
+      "recall": 0.75
+    },
+    "spike": {
+      "total_injected": 1,
+      "detected": 1,
+      "missed": 0,
+      "recall": 1.0
+    }
+  },
+  "evaluated_at": "2026-09-23T17:29:15.479370+00:00"
+}
