@@ -29,7 +29,7 @@ After finishing a feature: append to the changelog, flip its status in the Featu
 | F5 | Fault injection tool | ✅ | Parameterized fault injector (flatline, spike, drift, dropout, spatial, extreme weather), spotcheck plot reports/injected_faults_spotcheck.png, 11 tests |
 | F6 | Baseline ML scorer (IsolationForest) | ✅ | IsolationForest baseline per variable, 6D feature engineering, model registry, benchmark eval report (100% spike, 75% flatline, 58% drift recall) |
 | F7 | Spatial consistency checker | ✅ | Earth Cartesian 3D KDTree, batch neighbor queries, z-score deviation, SIH milestone validated (isolated fault flagged vs regional heatwave confirmed consistent), 8 tests |
-| F8 | Fault classifier (merge layer) | ⬜ | |
+| F8 | Fault classifier (merge layer) | ✅ | Unified merge layer (rules + ML + spatial), 100% precision, 66.7% recall, F1=0.80 on benchmark, 10 tests. Concludes Phase 2 per phase.md. |
 | F9 | LSTM-Autoencoder upgrade | ⬜ | stretch |
 | F10 | Alerts service | ⬜ | |
 | F11 | Dashboard: map view | ⬜ | |
@@ -43,6 +43,7 @@ After finishing a feature: append to the changelog, flip its status in the Featu
 ## Decision log
 *(Append-only. Each entry: date, decision, why, what alternative was rejected.)*
 
+- `2026-09-23` — Implemented F8 Fault Classifier (Merge Layer) in backend/qc/classifier.py. Merged deterministic rules (F4), Isolation Forest ML anomaly scores (F6), and cross-station spatial consistency (F7) into unified explainable verdicts with calibrated confidence. Evaluated against multi-station benchmark dataset, boosting precision from 29.58% (raw ML) to 100.0% with 66.67% interval recall (100% spike, 62.5% flatline, 66.7% drift) and zero false alarms. Integrated run_full_qc_pipeline_for_reading into ingestion service.
 - `2026-09-23` — Implemented F7 Spatial Consistency Checker in backend/qc/spatial.py. Built 3D Earth Cartesian KDTree spatial index with radius filtering. Implemented batch queries for contemporaneous neighbor observations to eliminate N+1 queries. Successfully passed the critical SIH milestone test: isolated +14°C sensor fault detected as SPATIAL_MISMATCH (z > 3.0), while simultaneous regional +8°C heatwave across all neighbor stations verified as SPATIAL_CONSISTENT.
 - `2026-09-23` — Implemented F6 Baseline ML Anomaly Scorer (Isolation Forest) in backend/qc/ml_scorer.py. Engineered 6D feature vector (value, 1-step delta, rolling mean diff, rolling std, cyclical diurnal hour sin/cos). Serialized StandardScaler with ModelBundle to eliminate train/inference skew. Implemented benchmark evaluator and recorded per-fault-type metrics in reports/model_eval_isolation_forest.json.
 - `2026-09-23` — Implemented F4 Rule-based QC layer in backend/qc/rules.py. Dynamically loads range and step thresholds from station.sensor_specs. Supports circular angular delta for wind_direction wrap around North (0°/360°), and provides physical domain exemptions for dry-weather zero rainfall and nighttime zero solar radiation during persistence checks. Integrated synchronous first-pass QC execution into ingestion service.
@@ -64,6 +65,7 @@ After finishing a feature: append to the changelog, flip its status in the Featu
 
 | Date | Model | Variable | Precision | Recall | F1 | Notes |
 |---|---|---|---|---|---|---|
+| 2026-09-23 | Full QC Pipeline (Rules+ML+Spatial Merge) | temperature | 1.0000 | 0.6667 | 0.8000 | Unified Classifier on F5 benchmark: Precision=1.0 (0 false positives), Recall=0.6667 (Spike: 1.0, Flatline: 0.625, Drift: 0.667). Eliminates all ML false positives via spatial consensus. |
 | 2026-09-23 | IsolationForest (v1.0.0) | temperature | 0.2958 | 0.6364 | 0.4038 | Baseline ML on F5 benchmark: Spikes recall=1.0, Flatlines recall=0.75, Drift recall=0.58. Precision will be boosted by F7 spatial checker and F8 classifier merge layer. |
 
 ## Data sources in use
@@ -80,6 +82,7 @@ After finishing a feature: append to the changelog, flip its status in the Featu
 ## Changelog
 *(One line per completed feature or significant fix. Newest at top.)*
 
+- `2026-09-23` — F8 complete: Fault classifier merge layer implemented and benchmarked (100% precision, F1=0.80, 78/78 tests passing total). Concludes Phase 2 per phase.md.
 - `2026-09-23` — F7 complete: Spatial consistency checker implemented with 3D KDTree and batch neighbor queries; SIH regional extreme weather invariance verified (68/68 tests passing total).
 - `2026-09-23` — F6 complete: Baseline ML anomaly scorer (IsolationForest) implemented with 6D feature engineering, model registry versioning, benchmark evaluation (60/60 tests passing total).
 - `2026-09-23` — F4 complete: Rule-based QC layer implemented with range, circular step, and persistence checks, DB persistence to qc_results, and 21 unit/integration tests (53/53 tests passing total).
@@ -93,7 +96,7 @@ After finishing a feature: append to the changelog, flip its status in the Featu
 When starting a new AI session, paste this filled-in block first:
 
 ```
-Current state: F7 complete. Next is Phase 2: F8 (Fault classifier - merge layer).
+Current state: Phase 2 complete (F4, F6, F7, F8 all ✅). Next is Phase 3: Operator-facing product (F10 Alerts service, F11 Dashboard Map View).
 Known issues: [pull from Known Issues section above]
 Do not re-litigate: [any settled architecture/tech decisions from Decision Log — don't let the AI suggest re-doing these without new evidence]
 ```

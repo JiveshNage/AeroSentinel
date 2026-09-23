@@ -1,0 +1,35 @@
+{
+  "pipeline_component": "fault_classifier_merge_layer",
+  "variable": "temperature",
+  "total_observations_evaluated": 233,
+  "overall": {
+    "precision": 1.0,
+    "recall": 0.6667,
+    "f1": 0.8,
+    "tp": 22,
+    "fp": 0,
+    "fn": 11,
+    "tn": 200
+  },
+  "per_fault_type": {
+    "drift": {
+      "total_injected": 24,
+      "detected": 16,
+      "missed": 8,
+      "recall": 0.6667
+    },
+    "flatline": {
+      "total_injected": 8,
+      "detected": 5,
+      "missed": 3,
+      "recall": 0.625
+    },
+    "spike": {
+      "total_injected": 1,
+      "detected": 1,
+      "missed": 0,
+      "recall": 1.0
+    }
+  },
+  "evaluated_at": "2026-09-23T17:39:54.029645+00:00"
+}

@@ -74,10 +74,10 @@ def ingest_reading(db: Session, request: IngestReadingRequest) -> RawReading:
             detail=f"Concurrent duplicate reading detected for station '{station.station_code}' at {request.timestamp.isoformat()}.",
         )
 
-    # First-pass rule-based QC evaluation (F4)
+    # Multi-tier QC pipeline execution (F8 classifier merge layer)
     try:
-        from qc.rules import run_qc_rules_for_reading
-        run_qc_rules_for_reading(db, reading.id)
+        from qc.classifier import run_full_qc_pipeline_for_reading
+        run_full_qc_pipeline_for_reading(db, reading.id)
     except Exception:
         pass
 
@@ -146,8 +146,8 @@ def ingest_batch(db: Session, batch: BatchIngestRequest) -> BatchIngestResponse:
             for r in new_readings:
                 db.refresh(r)
                 try:
-                    from qc.rules import run_qc_rules_for_reading
-                    run_qc_rules_for_reading(db, r.id)
+                    from qc.classifier import run_full_qc_pipeline_for_reading
+                    run_full_qc_pipeline_for_reading(db, r.id)
                 except Exception:
                     pass
         except IntegrityError:
