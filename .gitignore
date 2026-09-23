@@ -1,0 +1,35 @@
+# Environment and venv
+.venv/
+env/
+venv/
+ENV/
+*.env
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+.coverage
+htmlcov/
+dist/
+build/
+*.egg-info/
+
+# Node
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Database & Volumes
+pgdata/
+redisdata/
+
+# OS
+.DS_Store
+Thumbs.db

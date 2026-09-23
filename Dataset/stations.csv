@@ -1,0 +1,16 @@
+station_code,name,latitude,longitude,elevation_m,state,district
+NCR001,Delhi (Safdarjung),28.5822,77.2066,216,Delhi,New Delhi
+NCR002,Gurugram,28.4595,77.0266,217,Haryana,Gurugram
+NCR003,Noida,28.5355,77.3910,201,Uttar Pradesh,Gautam Buddh Nagar
+NCR004,Faridabad,28.4089,77.3178,201,Haryana,Faridabad
+NCR005,Ghaziabad,28.6692,77.4538,214,Uttar Pradesh,Ghaziabad
+NCR006,Meerut,28.9845,77.7064,219,Uttar Pradesh,Meerut
+NCR007,Rohtak,28.8955,76.6066,219,Haryana,Rohtak
+NCR008,Panipat,29.3909,76.9635,219,Haryana,Panipat
+NCR009,Bulandshahr,28.4041,77.8498,188,Uttar Pradesh,Bulandshahr
+NCR010,Alwar,27.5530,76.6346,268,Rajasthan,Alwar
+NCR011,Sonipat,28.9931,77.0151,220,Haryana,Sonipat
+NCR012,Palwal,28.1447,77.3272,201,Haryana,Palwal
+NCR013,Bharatpur,27.2152,77.4909,178,Rajasthan,Bharatpur
+NCR014,Baghpat,28.9448,77.2183,225,Uttar Pradesh,Baghpat
+NCR015,Jhajjar,28.6100,76.6565,220,Haryana,Jhajjar

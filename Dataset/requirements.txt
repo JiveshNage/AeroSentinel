@@ -1,0 +1,2 @@
+meteostat>=1.6.8
+pandas>=2.0.0

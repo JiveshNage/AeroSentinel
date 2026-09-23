@@ -1,0 +1,50 @@
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root, [data-theme="light"] {
+  --ink: #10161C;
+  --surface: #F6F7F8;
+  --panel: #FFFFFF;
+  --panel-raised: #FFFFFF;
+  --line: #D8DCE0;
+  --accent: #1D4E5F;
+  --muted: #5B6670;
+
+  --status-valid: #2E8B57;
+  --status-suspect: #D9A02B;
+  --status-anomalous: #C1443C;
+  --status-offline: #8A8F98;
+}
+
+[data-theme="dark"] {
+  --ink: #E8ECEF;
+  --surface: #12171C;
+  --panel: #1B2228;
+  --panel-raised: #212A31;
+  --line: #2C363D;
+  --accent: #4FA8BD;
+  --muted: #8A97A0;
+
+  --status-valid: #3FB876;
+  --status-suspect: #E8B84D;
+  --status-anomalous: #E0655C;
+  --status-offline: #6B747C;
+}
+
+body {
+  margin: 0;
+  background-color: var(--surface);
+  color: var(--ink);
+  font-family: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Operational tabular numerals */
+.font-mono-tabular {
+  font-family: 'IBM Plex Mono', monospace;
+  font-feature-settings: 'tnum' on, 'zero' on;
+}
