@@ -26,7 +26,7 @@ After finishing a feature: append to the changelog, flip its status in the Featu
 | F2 | Historical loader + simulator | ✅ | Meteostat loader + telemetry replay simulator with offline diurnal generation |
 | F3 | Ingestion API | ✅ | POST /ingest and /ingest/batch with deduplication, station registry validation, and 409/422 responses |
 | F4 | Rule-based QC layer | ⬜ | |
-| F5 | Fault injection tool | ⬜ | |
+| F5 | Fault injection tool | ✅ | Parameterized fault injector (flatline, spike, drift, dropout, spatial, extreme weather), spotcheck plot reports/injected_faults_spotcheck.png, 11 tests |
 | F6 | Baseline ML scorer (IsolationForest) | ⬜ | |
 | F7 | Spatial consistency checker | ⬜ | |
 | F8 | Fault classifier (merge layer) | ⬜ | |
@@ -43,6 +43,7 @@ After finishing a feature: append to the changelog, flip its status in the Featu
 ## Decision log
 *(Append-only. Each entry: date, decision, why, what alternative was rejected.)*
 
+- `2026-09-23` — Implemented F5 Fault Injection Tool in backend/qc/fault_injector.py supporting flatline, spike, drift, and dropout (both physical missing rows and sensor disconnection NaNs, never zero-filled per test.md). Added multi-station labeled benchmark generator and visual 4-panel verification plot in reports/injected_faults_spotcheck.png adhering to design.md palette.
 - `2026-09-23` — Implemented F3 Ingestion API (POST /ingest and POST /ingest/batch) supporting station resolution by code and UUID, deduplication returning 409 Conflict, Pydantic bounds checking, and spoofed station rejection (404). Mounted at both /ingest (matching architecture.md gateway spec) and /api/ingest.
 - `2026-09-23` — Implemented F2 Telemetry Replay Simulator in backend/ingestion/simulator.py with chronological multi-station replay, configurable delay/batching, CSV loader, and built-in diurnal synthetic generator for offline resilience.
 - `2026-09-23` — Implemented all database.md models in backend/storage/models.py using BigIntPK with SQLite Integer variant for multi-engine autoincrement compatibility. Generated initial Alembic migration 56bc0451d50b_create_initial_schema.py. Created idempotent seed script backend/storage/seed.py populating 20 stations with sensor_specs and default operator user.
@@ -76,6 +77,7 @@ After finishing a feature: append to the changelog, flip its status in the Featu
 ## Changelog
 *(One line per completed feature or significant fix. Newest at top.)*
 
+- `2026-09-23` — F5 complete: Fault injection tool implemented with 4-panel visual verification plot (reports/injected_faults_spotcheck.png) and 11 unit/adversarial tests (32/32 tests passing total). Concludes Phase 1 per phase.md.
 - `2026-09-23` — F3 & F2 complete: Ingestion API (single/batch, deduplication, validation) and telemetry replay simulator implemented with 21/21 passing backend tests.
 - `2026-09-23` — F1 complete: Database schema, Alembic migration lifecycle, and station seeder (20 stations) implemented with 13/13 passing tests.
 - `2026-09-23` — F0 complete: Scaffolded repo, Docker Compose, FastAPI health check (/api/health), React/Vite dashboard shell with design.md tokens, 5/5 unit tests passing.
@@ -85,7 +87,7 @@ After finishing a feature: append to the changelog, flip its status in the Featu
 When starting a new AI session, paste this filled-in block first:
 
 ```
-Current state: [which F# just completed, what's next per features.md]
+Current state: Phase 1 complete (F0, F1, F2, F3, F5 all ✅). Next is Phase 2: F4 (Rule-based QC layer).
 Known issues: [pull from Known Issues section above]
 Do not re-litigate: [any settled architecture/tech decisions from Decision Log — don't let the AI suggest re-doing these without new evidence]
 ```
