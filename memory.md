@@ -25,7 +25,7 @@ After finishing a feature: append to the changelog, flip its status in the Featu
 | F1 | DB schema & migrations | ✅ | SQLAlchemy models for all database.md tables, Alembic migration 56bc0451d50b, 20 seeded stations |
 | F2 | Historical loader + simulator | ✅ | Meteostat loader + telemetry replay simulator with offline diurnal generation |
 | F3 | Ingestion API | ✅ | POST /ingest and /ingest/batch with deduplication, station registry validation, and 409/422 responses |
-| F4 | Rule-based QC layer | ⬜ | |
+| F4 | Rule-based QC layer | ✅ | Pure range, step (circular wind direction wrap), and persistence checks with meteorological zero exemptions; DB persistence to qc_results; 21 tests |
 | F5 | Fault injection tool | ✅ | Parameterized fault injector (flatline, spike, drift, dropout, spatial, extreme weather), spotcheck plot reports/injected_faults_spotcheck.png, 11 tests |
 | F6 | Baseline ML scorer (IsolationForest) | ⬜ | |
 | F7 | Spatial consistency checker | ⬜ | |
@@ -43,6 +43,7 @@ After finishing a feature: append to the changelog, flip its status in the Featu
 ## Decision log
 *(Append-only. Each entry: date, decision, why, what alternative was rejected.)*
 
+- `2026-09-23` — Implemented F4 Rule-based QC layer in backend/qc/rules.py. Dynamically loads range and step thresholds from station.sensor_specs. Supports circular angular delta for wind_direction wrap around North (0°/360°), and provides physical domain exemptions for dry-weather zero rainfall and nighttime zero solar radiation during persistence checks. Integrated synchronous first-pass QC execution into ingestion service.
 - `2026-09-23` — Implemented F5 Fault Injection Tool in backend/qc/fault_injector.py supporting flatline, spike, drift, and dropout (both physical missing rows and sensor disconnection NaNs, never zero-filled per test.md). Added multi-station labeled benchmark generator and visual 4-panel verification plot in reports/injected_faults_spotcheck.png adhering to design.md palette.
 - `2026-09-23` — Implemented F3 Ingestion API (POST /ingest and POST /ingest/batch) supporting station resolution by code and UUID, deduplication returning 409 Conflict, Pydantic bounds checking, and spoofed station rejection (404). Mounted at both /ingest (matching architecture.md gateway spec) and /api/ingest.
 - `2026-09-23` — Implemented F2 Telemetry Replay Simulator in backend/ingestion/simulator.py with chronological multi-station replay, configurable delay/batching, CSV loader, and built-in diurnal synthetic generator for offline resilience.
@@ -77,6 +78,7 @@ After finishing a feature: append to the changelog, flip its status in the Featu
 ## Changelog
 *(One line per completed feature or significant fix. Newest at top.)*
 
+- `2026-09-23` — F4 complete: Rule-based QC layer implemented with range, circular step, and persistence checks, DB persistence to qc_results, and 21 unit/integration tests (53/53 tests passing total).
 - `2026-09-23` — F5 complete: Fault injection tool implemented with 4-panel visual verification plot (reports/injected_faults_spotcheck.png) and 11 unit/adversarial tests (32/32 tests passing total). Concludes Phase 1 per phase.md.
 - `2026-09-23` — F3 & F2 complete: Ingestion API (single/batch, deduplication, validation) and telemetry replay simulator implemented with 21/21 passing backend tests.
 - `2026-09-23` — F1 complete: Database schema, Alembic migration lifecycle, and station seeder (20 stations) implemented with 13/13 passing tests.
@@ -87,7 +89,7 @@ After finishing a feature: append to the changelog, flip its status in the Featu
 When starting a new AI session, paste this filled-in block first:
 
 ```
-Current state: Phase 1 complete (F0, F1, F2, F3, F5 all ✅). Next is Phase 2: F4 (Rule-based QC layer).
+Current state: F4 complete. Next is Phase 2: F6 (Baseline ML scorer - IsolationForest).
 Known issues: [pull from Known Issues section above]
 Do not re-litigate: [any settled architecture/tech decisions from Decision Log — don't let the AI suggest re-doing these without new evidence]
 ```

@@ -67,13 +67,21 @@ def ingest_reading(db: Session, request: IngestReadingRequest) -> RawReading:
         db.add(reading)
         db.commit()
         db.refresh(reading)
-        return reading
     except IntegrityError:
         db.rollback()
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=f"Concurrent duplicate reading detected for station '{station.station_code}' at {request.timestamp.isoformat()}.",
         )
+
+    # First-pass rule-based QC evaluation (F4)
+    try:
+        from qc.rules import run_qc_rules_for_reading
+        run_qc_rules_for_reading(db, reading.id)
+    except Exception:
+        pass
+
+    return reading
 
 
 def ingest_batch(db: Session, batch: BatchIngestRequest) -> BatchIngestResponse:
@@ -137,6 +145,11 @@ def ingest_batch(db: Session, batch: BatchIngestRequest) -> BatchIngestResponse:
             db.commit()
             for r in new_readings:
                 db.refresh(r)
+                try:
+                    from qc.rules import run_qc_rules_for_reading
+                    run_qc_rules_for_reading(db, r.id)
+                except Exception:
+                    pass
         except IntegrityError:
             db.rollback()
             raise HTTPException(
