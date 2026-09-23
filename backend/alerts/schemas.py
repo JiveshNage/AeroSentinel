@@ -25,6 +25,7 @@ class AlertResponse(BaseModel):
     channel_sent: Dict[str, Any] = {}
     created_at: datetime
     resolved_at: Optional[datetime] = None
+    feedback_label: Optional[str] = None
 
 
 class UpdateAlertRequest(BaseModel):
@@ -34,3 +35,30 @@ class UpdateAlertRequest(BaseModel):
 class AlertListResponse(BaseModel):
     total: int
     alerts: List[AlertResponse]
+
+
+class SubmitFeedbackRequest(BaseModel):
+    label: str  # confirmed_fault, false_alarm, unsure
+    notes: Optional[str] = None
+    user_email: Optional[str] = None
+
+
+class FeedbackResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    alert_id: Optional[int] = None
+    qc_result_id: int
+    station_code: Optional[str] = None
+    station_name: Optional[str] = None
+    variable: Optional[str] = None
+    label: str
+    notes: Optional[str] = None
+    user_id: Optional[uuid.UUID] = None
+    user_email: Optional[str] = None
+    created_at: datetime
+
+
+class FeedbackListResponse(BaseModel):
+    total: int
+    feedback: List[FeedbackResponse]

@@ -1,13 +1,19 @@
 import React, { useEffect, useState } from 'react';
-import { Map, Server, Activity } from 'lucide-react';
+import { Map, Server, Activity, ShieldAlert } from 'lucide-react';
 
 interface HeaderProps {
   systemHealthy: boolean | null;
-  activeTab: 'map' | 'detail' | 'system';
-  onTabChange: (tab: 'map' | 'detail' | 'system') => void;
+  activeTab: 'map' | 'detail' | 'alerts' | 'system';
+  onTabChange: (tab: 'map' | 'detail' | 'alerts' | 'system') => void;
+  activeAlertsCount?: number;
 }
 
-export const Header: React.FC<HeaderProps> = ({ systemHealthy, activeTab, onTabChange }) => {
+export const Header: React.FC<HeaderProps> = ({
+  systemHealthy,
+  activeTab,
+  onTabChange,
+  activeAlertsCount,
+}) => {
   const [theme, setTheme] = useState<'light' | 'dark'>(() => {
     const saved = localStorage.getItem('aerosentinel-theme');
     if (saved === 'dark' || saved === 'light') return saved;
@@ -20,7 +26,7 @@ export const Header: React.FC<HeaderProps> = ({ systemHealthy, activeTab, onTabC
   }, [theme]);
 
   const toggleTheme = () => {
-    setTheme(prev => (prev === 'light' ? 'dark' : 'light'));
+    setTheme((prev: 'light' | 'dark') => (prev === 'light' ? 'dark' : 'light'));
   };
 
   return (
@@ -59,6 +65,22 @@ export const Header: React.FC<HeaderProps> = ({ systemHealthy, activeTab, onTabC
           >
             <Activity className="w-3.5 h-3.5" />
             <span>Station Detail</span>
+          </button>
+          <button
+            onClick={() => onTabChange('alerts')}
+            className={`flex items-center space-x-1.5 px-3 py-1.5 rounded text-[0.8125rem] font-medium transition-colors ${
+              activeTab === 'alerts'
+                ? 'bg-accent text-white shadow-sm'
+                : 'text-muted hover:text-ink hover:bg-surface'
+            }`}
+          >
+            <ShieldAlert className="w-3.5 h-3.5" />
+            <span>Alerts Feed</span>
+            {activeAlertsCount !== undefined && activeAlertsCount > 0 && (
+              <span className="ml-1 px-1.5 py-0.2 rounded-full text-[0.6875rem] font-mono bg-status-anomalous text-white font-bold">
+                {activeAlertsCount}
+              </span>
+            )}
           </button>
           <button
             onClick={() => onTabChange('system')}

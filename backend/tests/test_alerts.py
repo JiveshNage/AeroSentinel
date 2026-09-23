@@ -327,3 +327,177 @@ def test_end_to_end_ingestion_triggers_alert(api_client, memory_db):
     assert latest_alert["status"] == "open"
     assert "68.5" in latest_alert["message"]
     assert latest_alert["channel_sent"]["websocket"] is True
+
+
+# ---------------------------------------------------------------------------
+# 6. Operator Feedback Capture & Auditing Tests (F13)
+# ---------------------------------------------------------------------------
+
+def test_submit_feedback_confirmed_fault(api_client, memory_db):
+    """Assert submitting 'confirmed_fault' logs feedback and updates alert to acknowledged."""
+    st = Station(
+        id=uuid.uuid4(),
+        station_code="FB_CONFIRM_ST",
+        name="Feedback Test Station 1",
+        latitude=28.6,
+        longitude=77.2,
+        elevation_m=215.0,
+        state="Delhi",
+        district="Delhi",
+        status=StationStatus.active,
+    )
+    memory_db.add(st)
+    r = RawReading(station_id=st.id, timestamp=datetime(2024, 6, 1, 10, 0, 0, tzinfo=timezone.utc), temperature=72.0)
+    memory_db.add(r)
+    memory_db.commit()
+
+    qc = QCResult(
+        reading_id=r.id,
+        station_id=st.id,
+        variable="temperature",
+        verdict=QCVerdict.anomalous,
+        reason_code="RULE_RANGE",
+        fault_type="spike",
+        confidence=0.99,
+        details={"rule": {"details": {"value": 72.0}}},
+    )
+    memory_db.add(qc)
+    memory_db.commit()
+
+    alert = create_alert_for_qc_result(memory_db, qc)
+    assert alert.status == AlertStatus.open
+
+    # Submit Confirmed Fault feedback
+    payload = {
+        "label": "confirmed_fault",
+        "notes": "Verified faulty thermistor spike",
+        "user_email": "ops@aerosentinel.gov.in",
+    }
+    resp = api_client.post(f"/api/alerts/{alert.id}/feedback", json=payload)
+    assert resp.status_code == 201
+    fb_data = resp.json()
+    assert fb_data["alert_id"] == alert.id
+    assert fb_data["qc_result_id"] == qc.id
+    assert fb_data["station_code"] == "FB_CONFIRM_ST"
+    assert fb_data["variable"] == "temperature"
+    assert fb_data["label"] == "confirmed_fault"
+    assert fb_data["notes"] == "Verified faulty thermistor spike"
+    assert fb_data["user_email"] == "ops@aerosentinel.gov.in"
+
+    # Verify Alert status automatically transitioned to acknowledged
+    alert_resp = api_client.get(f"/api/alerts/{alert.id}")
+    assert alert_resp.status_code == 200
+    alert_data = alert_resp.json()
+    assert alert_data["status"] == "acknowledged"
+    assert alert_data["feedback_label"] == "confirmed_fault"
+
+
+def test_submit_feedback_false_alarm(api_client, memory_db):
+    """Assert submitting 'false_alarm' logs feedback and resolves the alert."""
+    st = Station(
+        id=uuid.uuid4(),
+        station_code="FB_FALSE_ST",
+        name="Feedback Test Station 2",
+        latitude=28.6,
+        longitude=77.2,
+        elevation_m=215.0,
+        state="Delhi",
+        district="Delhi",
+        status=StationStatus.active,
+    )
+    memory_db.add(st)
+    r = RawReading(station_id=st.id, timestamp=datetime(2024, 6, 1, 10, 0, 0, tzinfo=timezone.utc), temperature=48.0)
+    memory_db.add(r)
+    memory_db.commit()
+
+    qc = QCResult(
+        reading_id=r.id,
+        station_id=st.id,
+        variable="temperature",
+        verdict=QCVerdict.anomalous,
+        reason_code="ML_ISOFOREST",
+        fault_type="outlier",
+        confidence=0.85,
+        details={"ml": {"score": -0.25}},
+    )
+    memory_db.add(qc)
+    memory_db.commit()
+
+    alert = create_alert_for_qc_result(memory_db, qc)
+    assert alert.status == AlertStatus.open
+
+    # Submit False Alarm feedback
+    payload = {
+        "label": "false_alarm",
+        "notes": "Extreme microclimate heatwave validated with nearby stations",
+        "user_email": "meteorologist@aerosentinel.gov.in",
+    }
+    resp = api_client.post(f"/api/alerts/{alert.id}/feedback", json=payload)
+    assert resp.status_code == 201
+    fb_data = resp.json()
+    assert fb_data["label"] == "false_alarm"
+
+    # Verify Alert is now resolved with resolved_at set
+    alert_resp = api_client.get(f"/api/alerts/{alert.id}")
+    assert alert_resp.status_code == 200
+    alert_data = alert_resp.json()
+    assert alert_data["status"] == "resolved"
+    assert alert_data["resolved_at"] is not None
+    assert alert_data["feedback_label"] == "false_alarm"
+
+
+def test_submit_feedback_invalid_label_and_listing(api_client, memory_db):
+    """Assert invalid label rejection and feedback auditing query endpoint."""
+    st = Station(
+        id=uuid.uuid4(),
+        station_code="FB_AUDIT_ST",
+        name="Feedback Audit Station",
+        latitude=28.6,
+        longitude=77.2,
+        elevation_m=215.0,
+        state="Delhi",
+        district="Delhi",
+        status=StationStatus.active,
+    )
+    memory_db.add(st)
+    r = RawReading(station_id=st.id, timestamp=datetime(2024, 6, 1, 10, 0, 0, tzinfo=timezone.utc), temperature=50.0)
+    memory_db.add(r)
+    memory_db.commit()
+
+    qc = QCResult(
+        reading_id=r.id,
+        station_id=st.id,
+        variable="temperature",
+        verdict=QCVerdict.anomalous,
+        reason_code="RULE_RANGE",
+        confidence=0.95,
+    )
+    memory_db.add(qc)
+    memory_db.commit()
+
+    alert = create_alert_for_qc_result(memory_db, qc)
+
+    # 1. Invalid label -> 400
+    bad_resp = api_client.post(f"/api/alerts/{alert.id}/feedback", json={"label": "invalid_choice"})
+    assert bad_resp.status_code == 400
+
+    # 2. Valid unsure submission
+    valid_resp = api_client.post(
+        f"/api/alerts/{alert.id}/feedback",
+        json={"label": "unsure", "notes": "Requires field engineer inspection"},
+    )
+    assert valid_resp.status_code == 201
+
+    # 3. GET /api/feedback
+    list_resp = api_client.get("/api/feedback")
+    assert list_resp.status_code == 200
+    fb_list = list_resp.json()
+    assert fb_list["total"] >= 1
+    assert any(fb["qc_result_id"] == qc.id for fb in fb_list["feedback"])
+
+    # 4. Filter by label
+    unsure_list = api_client.get("/api/feedback?label=unsure").json()
+    assert unsure_list["total"] >= 1
+    crit_list = api_client.get("/api/feedback?label=confirmed_fault").json()
+    assert crit_list["total"] == 0
+

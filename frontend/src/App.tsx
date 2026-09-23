@@ -3,14 +3,17 @@ import { Header } from './components/Header';
 import { HealthCard } from './components/HealthCard';
 import { MapView } from './pages/MapView';
 import { StationDetailView } from './pages/StationDetailView';
+import { AlertsFeedView } from './pages/AlertsFeedView';
 import { fetchHealth, HealthResponse } from './api/client';
+import { fetchAlerts } from './api/alerts';
 
 export const App: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<'map' | 'detail' | 'system'>('map');
+  const [activeTab, setActiveTab] = useState<'map' | 'detail' | 'alerts' | 'system'>('map');
   const [selectedStationCode, setSelectedStationCode] = useState<string>('NCR001');
   const [healthData, setHealthData] = useState<HealthResponse | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+  const [activeAlertsCount, setActiveAlertsCount] = useState<number>(0);
 
   const checkHealth = useCallback(async () => {
     setLoading(true);
@@ -27,11 +30,24 @@ export const App: React.FC = () => {
     }
   }, []);
 
+  const refreshAlertCount = useCallback(async () => {
+    try {
+      const res = await fetchAlerts({ status: 'open', limit: 1 });
+      setActiveAlertsCount(res.total);
+    } catch (e) {
+      // Ignore count fetch errors
+    }
+  }, []);
+
   useEffect(() => {
     checkHealth();
-    const interval = setInterval(checkHealth, 30000);
+    refreshAlertCount();
+    const interval = setInterval(() => {
+      checkHealth();
+      refreshAlertCount();
+    }, 30000);
     return () => clearInterval(interval);
-  }, [checkHealth]);
+  }, [checkHealth, refreshAlertCount]);
 
   const isHealthy = healthData?.status === 'healthy';
 
@@ -41,6 +57,7 @@ export const App: React.FC = () => {
         systemHealthy={error ? false : loading && !healthData ? null : isHealthy}
         activeTab={activeTab}
         onTabChange={setActiveTab}
+        activeAlertsCount={activeAlertsCount}
       />
 
       <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 space-y-6">
@@ -55,6 +72,13 @@ export const App: React.FC = () => {
           <StationDetailView
             initialStationCode={selectedStationCode}
             onBackToMap={() => setActiveTab('map')}
+          />
+        ) : activeTab === 'alerts' ? (
+          <AlertsFeedView
+            onInspectStation={(code) => {
+              setSelectedStationCode(code);
+              setActiveTab('detail');
+            }}
           />
         ) : (
           <div className="space-y-6">
