@@ -222,6 +222,13 @@ def run_full_qc_pipeline_for_reading(
         db.commit()
         for res in merged_results:
             db.refresh(res)
+            # Create operational alerts for anomalous or suspect verdicts (F10)
+            if res.verdict in (QCVerdict.anomalous, QCVerdict.suspect):
+                try:
+                    from alerts.service import create_alert_for_qc_result
+                    create_alert_for_qc_result(db, res)
+                except Exception:
+                    pass
 
     return merged_results
 
