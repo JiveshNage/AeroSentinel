@@ -251,3 +251,116 @@ def test_get_station_detail_not_found(api_client: TestClient, memory_db):
     resp = api_client.get("/api/stations/NON_EXISTENT_STATION")
     assert resp.status_code == 404
     assert "not found" in resp.json()["detail"].lower()
+
+
+def test_get_station_telemetry_with_qc_overlay(api_client: TestClient, memory_db):
+    """Telemetry endpoint returns chronological stream with merged QC diagnostics."""
+    st = Station(
+        id=uuid.uuid4(),
+        station_code="TELEMETRY_QC_ST",
+        name="Telemetry QC Station",
+        latitude=28.7,
+        longitude=77.1,
+        state="Delhi",
+        district="North Delhi",
+        sensor_specs={"temperature": {"min": -10.0, "max": 50.0}},
+        status=StationStatus.active,
+    )
+    memory_db.add(st)
+    memory_db.commit()
+
+    # Reading 1: Normal
+    r1 = RawReading(
+        station_id=st.id,
+        timestamp=datetime(2024, 6, 1, 10, 0, 0, tzinfo=timezone.utc),
+        temperature=32.0,
+        humidity=60.0,
+    )
+    memory_db.add(r1)
+
+    # Reading 2: Anomalous Spike
+    r2 = RawReading(
+        station_id=st.id,
+        timestamp=datetime(2024, 6, 1, 11, 0, 0, tzinfo=timezone.utc),
+        temperature=65.0,
+        humidity=25.0,
+    )
+    memory_db.add(r2)
+    memory_db.commit()
+
+    # QC Result on Reading 2
+    qc = QCResult(
+        reading_id=r2.id,
+        station_id=st.id,
+        variable="temperature",
+        verdict=QCVerdict.anomalous,
+        reason_code="RULE_RANGE_MAX",
+        fault_type="spike",
+        confidence=0.99,
+        details={"value": 65.0, "threshold": 50.0},
+    )
+    memory_db.add(qc)
+    memory_db.commit()
+
+    resp = api_client.get(f"/api/stations/{st.station_code}/telemetry")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["station_code"] == "TELEMETRY_QC_ST"
+    assert data["total_points"] == 2
+    pts = data["telemetry"]
+    assert len(pts) == 2
+
+    # Chronological order check: r1 before r2
+    assert pts[0]["temperature"] == 32.0
+    assert pts[1]["temperature"] == 65.0
+
+    # QC overlay check on r2
+    assert "temperature" in pts[1]["qc_verdicts"]
+    qc_info = pts[1]["qc_verdicts"]["temperature"]
+    assert qc_info["verdict"] == "anomalous"
+    assert qc_info["reason_code"] == "RULE_RANGE_MAX"
+    assert qc_info["fault_type"] == "spike"
+    assert qc_info["confidence"] == 0.99
+
+
+def test_get_station_telemetry_time_filtering(api_client: TestClient, memory_db):
+    """Telemetry endpoint filters by start_time, end_time, and limit."""
+    st = Station(
+        id=uuid.uuid4(),
+        station_code="FILTER_TEST_ST",
+        name="Filter Test Station",
+        latitude=26.9,
+        longitude=75.8,
+        state="Rajasthan",
+        district="Jaipur",
+        status=StationStatus.active,
+    )
+    memory_db.add(st)
+    memory_db.commit()
+
+    # Add 5 hourly readings
+    for i in range(5):
+        r = RawReading(
+            station_id=st.id,
+            timestamp=datetime(2024, 6, 1, 10 + i, 0, 0, tzinfo=timezone.utc),
+            temperature=30.0 + i,
+        )
+        memory_db.add(r)
+    memory_db.commit()
+
+    # Limit filter
+    resp = api_client.get(f"/api/stations/{st.station_code}/telemetry?limit=2")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["total_points"] == 2
+    # Should be the latest 2 in chronological order: 13:00 and 14:00
+    assert data["telemetry"][0]["temperature"] == 33.0
+    assert data["telemetry"][1]["temperature"] == 34.0
+
+    # Time window filter
+    resp2 = api_client.get(
+        f"/api/stations/{st.station_code}/telemetry?start_time=2024-06-01T11:00:00Z&end_time=2024-06-01T13:00:00Z"
+    )
+    assert resp2.status_code == 200
+    data2 = resp2.json()
+    assert data2["total_points"] == 3

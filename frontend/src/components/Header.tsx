@@ -1,10 +1,10 @@
 import React, { useEffect, useState } from 'react';
-import { Map, Server } from 'lucide-react';
+import { Map, Server, Activity } from 'lucide-react';
 
 interface HeaderProps {
   systemHealthy: boolean | null;
-  activeTab: 'map' | 'system';
-  onTabChange: (tab: 'map' | 'system') => void;
+  activeTab: 'map' | 'detail' | 'system';
+  onTabChange: (tab: 'map' | 'detail' | 'system') => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({ systemHealthy, activeTab, onTabChange }) => {
@@ -48,6 +48,17 @@ export const Header: React.FC<HeaderProps> = ({ systemHealthy, activeTab, onTabC
           >
             <Map className="w-3.5 h-3.5" />
             <span>Fleet Map</span>
+          </button>
+          <button
+            onClick={() => onTabChange('detail')}
+            className={`flex items-center space-x-1.5 px-3 py-1.5 rounded text-[0.8125rem] font-medium transition-colors ${
+              activeTab === 'detail'
+                ? 'bg-accent text-white shadow-sm'
+                : 'text-muted hover:text-ink hover:bg-surface'
+            }`}
+          >
+            <Activity className="w-3.5 h-3.5" />
+            <span>Station Detail</span>
           </button>
           <button
             onClick={() => onTabChange('system')}

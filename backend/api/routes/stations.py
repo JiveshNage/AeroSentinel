@@ -69,6 +69,36 @@ class StationDetailResponse(StationSummaryResponse):
     active_alerts: List[Dict[str, Any]] = []
 
 
+class QCVariableVerdictSchema(BaseModel):
+    verdict: QCVerdict
+    reason_code: str
+    fault_type: Optional[str] = None
+    confidence: float
+    details: Dict[str, Any] = Field(default_factory=dict)
+
+
+class TelemetryPointSchema(BaseModel):
+    id: int
+    timestamp: datetime
+    temperature: Optional[float] = None
+    humidity: Optional[float] = None
+    pressure: Optional[float] = None
+    wind_speed: Optional[float] = None
+    wind_direction: Optional[float] = None
+    rainfall: Optional[float] = None
+    solar_radiation: Optional[float] = None
+    qc_verdicts: Dict[str, QCVariableVerdictSchema] = Field(default_factory=dict)
+
+
+class StationTelemetryResponse(BaseModel):
+    station_id: uuid.UUID
+    station_code: str
+    name: str
+    sensor_specs: Dict[str, Any]
+    total_points: int
+    telemetry: List[TelemetryPointSchema]
+
+
 @router.get("", response_model=StationListResponse)
 def list_stations(
     state: Optional[str] = Query(None, description="Filter by Indian State"),
@@ -305,4 +335,93 @@ def get_station_detail(
         sensor_specs=st.sensor_specs or {},
         recent_readings=recent_readings,
         active_alerts=active_alerts,
+    )
+
+
+@router.get("/{station_id}/telemetry", response_model=StationTelemetryResponse)
+def get_station_telemetry(
+    station_id: str,
+    start_time: Optional[datetime] = Query(None, description="Filter readings starting at UTC ISO timestamp"),
+    end_time: Optional[datetime] = Query(None, description="Filter readings ending at UTC ISO timestamp"),
+    limit: int = Query(100, ge=1, le=500, description="Maximum readings to return (default 100, max 500)"),
+    db: Session = Depends(get_db),
+):
+    """
+    Retrieve chronological telemetry time-series for a station with merged
+    per-variable QC verdicts, reason codes, and anomaly confidence.
+    """
+    query = db.query(Station)
+    try:
+        val_uuid = uuid.UUID(station_id)
+        st = query.filter(Station.id == val_uuid).first()
+    except ValueError:
+        st = query.filter(Station.station_code == station_id).first()
+
+    if not st:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Station '{station_id}' not found.",
+        )
+
+    # 1. Fetch raw readings for this station
+    r_query = db.query(RawReading).filter(RawReading.station_id == st.id)
+    if start_time:
+        r_query = r_query.filter(RawReading.timestamp >= start_time)
+    if end_time:
+        r_query = r_query.filter(RawReading.timestamp <= end_time)
+
+    readings = r_query.order_by(RawReading.timestamp.desc()).limit(limit).all()
+    # Reverse so readings are in ascending chronological order for charts
+    readings.reverse()
+
+    if not readings:
+        return StationTelemetryResponse(
+            station_id=st.id,
+            station_code=st.station_code,
+            name=st.name,
+            sensor_specs=st.sensor_specs or {},
+            total_points=0,
+            telemetry=[],
+        )
+
+    reading_ids = [r.id for r in readings]
+
+    # 2. Single batch fetch for all QCResults associated with these readings
+    qc_rows = db.query(QCResult).filter(QCResult.reading_id.in_(reading_ids)).all()
+    qc_by_reading: Dict[int, Dict[str, QCVariableVerdictSchema]] = {}
+    for qc in qc_rows:
+        if qc.reading_id not in qc_by_reading:
+            qc_by_reading[qc.reading_id] = {}
+        qc_by_reading[qc.reading_id][qc.variable] = QCVariableVerdictSchema(
+            verdict=qc.verdict,
+            reason_code=qc.reason_code,
+            fault_type=qc.fault_type,
+            confidence=qc.confidence,
+            details=qc.details or {},
+        )
+
+    # 3. Assemble response points
+    telemetry_points: List[TelemetryPointSchema] = []
+    for r in readings:
+        point = TelemetryPointSchema(
+            id=r.id,
+            timestamp=r.timestamp,
+            temperature=r.temperature,
+            humidity=r.humidity,
+            pressure=r.pressure,
+            wind_speed=r.wind_speed,
+            wind_direction=r.wind_direction,
+            rainfall=r.rainfall,
+            solar_radiation=r.solar_radiation,
+            qc_verdicts=qc_by_reading.get(r.id, {}),
+        )
+        telemetry_points.append(point)
+
+    return StationTelemetryResponse(
+        station_id=st.id,
+        station_code=st.station_code,
+        name=st.name,
+        sensor_specs=st.sensor_specs or {},
+        total_points=len(telemetry_points),
+        telemetry=telemetry_points,
     )
