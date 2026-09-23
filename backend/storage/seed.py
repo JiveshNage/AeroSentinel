@@ -101,6 +101,9 @@ def seed_database(db: Session = None) -> int:
         close_after = True
 
     try:
+        # Ensure schema tables exist
+        Base.metadata.create_all(bind=engine)
+
         # 1. Locate stations.csv
         workspace_root = Path(__file__).resolve().parent.parent.parent
         csv_candidates = [

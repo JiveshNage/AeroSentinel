@@ -1,0 +1,308 @@
+"""
+stations.py — Station Registry & Real-Time Health Status API (F11)
+"""
+
+from datetime import datetime, timezone
+import enum
+from typing import Any, Dict, List, Optional
+import uuid
+
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from pydantic import BaseModel, Field
+from sqlalchemy import func
+from sqlalchemy.orm import Session
+
+from storage.db import get_db
+from storage.models import Alert, AlertStatus, QCResult, QCVerdict, RawReading, Station, StationStatus
+
+
+router = APIRouter(prefix="/stations", tags=["stations"])
+
+
+class StationHealthStatus(str, enum.Enum):
+    healthy = "healthy"
+    suspect = "suspect"
+    anomalous = "anomalous"
+    offline = "offline"
+
+
+class LatestReadingSchema(BaseModel):
+    timestamp: datetime
+    temperature: Optional[float] = None
+    humidity: Optional[float] = None
+    pressure: Optional[float] = None
+    wind_speed: Optional[float] = None
+    wind_direction: Optional[float] = None
+    rainfall: Optional[float] = None
+    solar_radiation: Optional[float] = None
+
+
+class StationSummaryResponse(BaseModel):
+    id: uuid.UUID
+    station_code: str
+    name: str
+    latitude: float
+    longitude: float
+    elevation_m: Optional[float] = None
+    state: str
+    district: str
+    status: StationStatus
+    health_status: StationHealthStatus
+    latest_reading: Optional[LatestReadingSchema] = None
+    latest_verdict: Optional[QCVerdict] = None
+    active_alerts_count: int = 0
+    latest_fault_type: Optional[str] = None
+    sensor_specs: Dict[str, Any] = Field(default_factory=dict)
+
+
+class StationListResponse(BaseModel):
+    total: int
+    healthy_count: int
+    suspect_count: int
+    anomalous_count: int
+    offline_count: int
+    stations: List[StationSummaryResponse]
+
+
+class StationDetailResponse(StationSummaryResponse):
+    recent_readings: List[LatestReadingSchema] = []
+    active_alerts: List[Dict[str, Any]] = []
+
+
+@router.get("", response_model=StationListResponse)
+def list_stations(
+    state: Optional[str] = Query(None, description="Filter by Indian State"),
+    status_filter: Optional[StationStatus] = Query(None, alias="status", description="Filter by station administrative status"),
+    db: Session = Depends(get_db),
+):
+    """
+    List all weather stations with aggregated real-time health verdicts,
+    latest sensor telemetry, and active alert counters.
+
+    Uses batch aggregation queries to prevent N+1 overhead.
+    """
+    query = db.query(Station)
+    if state:
+        query = query.filter(Station.state == state)
+    if status_filter:
+        query = query.filter(Station.status == status_filter)
+
+    stations = query.order_by(Station.state, Station.station_code).all()
+    if not stations:
+        return StationListResponse(
+            total=0,
+            healthy_count=0,
+            suspect_count=0,
+            anomalous_count=0,
+            offline_count=0,
+            stations=[],
+        )
+
+    station_ids = [s.id for s in stations]
+
+    # 1. Batch fetch latest reading per station (subquery max timestamp)
+    subq_reading = (
+        db.query(RawReading.station_id, func.max(RawReading.timestamp).label("max_ts"))
+        .filter(RawReading.station_id.in_(station_ids))
+        .group_by(RawReading.station_id)
+        .subquery()
+    )
+    latest_readings = (
+        db.query(RawReading)
+        .join(subq_reading, (RawReading.station_id == subq_reading.c.station_id) & (RawReading.timestamp == subq_reading.c.max_ts))
+        .all()
+    )
+    latest_readings_map = {r.station_id: r for r in latest_readings}
+
+    # 2. Batch fetch active alert count per station
+    alert_counts = (
+        db.query(Alert.station_id, func.count(Alert.id).label("cnt"))
+        .filter(Alert.station_id.in_(station_ids), Alert.status != AlertStatus.resolved)
+        .group_by(Alert.station_id)
+        .all()
+    )
+    alert_counts_map = {st_id: cnt for st_id, cnt in alert_counts}
+
+    # 3. Batch fetch latest QC verdict per station (subquery max id)
+    subq_qc = (
+        db.query(QCResult.station_id, func.max(QCResult.id).label("max_id"))
+        .filter(QCResult.station_id.in_(station_ids))
+        .group_by(QCResult.station_id)
+        .subquery()
+    )
+    latest_qcs = (
+        db.query(QCResult)
+        .join(subq_qc, (QCResult.station_id == subq_qc.c.station_id) & (QCResult.id == subq_qc.c.max_id))
+        .all()
+    )
+    latest_qc_map = {q.station_id: q for q in latest_qcs}
+
+    # Assemble response items
+    station_summaries: List[StationSummaryResponse] = []
+    healthy_cnt = 0
+    suspect_cnt = 0
+    anomalous_cnt = 0
+    offline_cnt = 0
+
+    for st in stations:
+        reading = latest_readings_map.get(st.id)
+        qc = latest_qc_map.get(st.id)
+        active_alerts = alert_counts_map.get(st.id, 0)
+
+        # Health determination logic
+        if st.status != StationStatus.active or reading is None:
+            health = StationHealthStatus.offline
+            offline_cnt += 1
+        elif active_alerts > 0 or (qc and qc.verdict == QCVerdict.anomalous):
+            health = StationHealthStatus.anomalous
+            anomalous_cnt += 1
+        elif qc and qc.verdict == QCVerdict.suspect:
+            health = StationHealthStatus.suspect
+            suspect_cnt += 1
+        else:
+            health = StationHealthStatus.healthy
+            healthy_cnt += 1
+
+        reading_schema = None
+        if reading:
+            reading_schema = LatestReadingSchema(
+                timestamp=reading.timestamp,
+                temperature=reading.temperature,
+                humidity=reading.humidity,
+                pressure=reading.pressure,
+                wind_speed=reading.wind_speed,
+                wind_direction=reading.wind_direction,
+                rainfall=reading.rainfall,
+                solar_radiation=reading.solar_radiation,
+            )
+
+        summary = StationSummaryResponse(
+            id=st.id,
+            station_code=st.station_code,
+            name=st.name,
+            latitude=st.latitude,
+            longitude=st.longitude,
+            elevation_m=st.elevation_m,
+            state=st.state,
+            district=st.district,
+            status=st.status,
+            health_status=health,
+            latest_reading=reading_schema,
+            latest_verdict=qc.verdict if qc else None,
+            active_alerts_count=active_alerts,
+            latest_fault_type=qc.fault_type if qc else None,
+            sensor_specs=st.sensor_specs or {},
+        )
+        station_summaries.append(summary)
+
+    return StationListResponse(
+        total=len(station_summaries),
+        healthy_count=healthy_cnt,
+        suspect_count=suspect_cnt,
+        anomalous_count=anomalous_cnt,
+        offline_count=offline_cnt,
+        stations=station_summaries,
+    )
+
+
+@router.get("/{station_id}", response_model=StationDetailResponse)
+def get_station_detail(
+    station_id: str,
+    db: Session = Depends(get_db),
+):
+    """
+    Retrieve single station details with recent telemetry readings and active alerts.
+    Station ID can be a UUID or station_code (e.g. 'NCR001').
+    """
+    query = db.query(Station)
+    try:
+        val_uuid = uuid.UUID(station_id)
+        st = query.filter(Station.id == val_uuid).first()
+    except ValueError:
+        st = query.filter(Station.station_code == station_id).first()
+
+    if not st:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Station '{station_id}' not found.",
+        )
+
+    # Fetch last 50 readings
+    recent_readings_rows = (
+        db.query(RawReading)
+        .filter(RawReading.station_id == st.id)
+        .order_by(RawReading.timestamp.desc())
+        .limit(50)
+        .all()
+    )
+
+    recent_readings = [
+        LatestReadingSchema(
+            timestamp=r.timestamp,
+            temperature=r.temperature,
+            humidity=r.humidity,
+            pressure=r.pressure,
+            wind_speed=r.wind_speed,
+            wind_direction=r.wind_direction,
+            rainfall=r.rainfall,
+            solar_radiation=r.solar_radiation,
+        )
+        for r in recent_readings_rows
+    ]
+
+    latest_reading = recent_readings[0] if recent_readings else None
+
+    # Fetch active alerts
+    alerts_rows = (
+        db.query(Alert)
+        .filter(Alert.station_id == st.id, Alert.status != AlertStatus.resolved)
+        .order_by(Alert.created_at.desc())
+        .all()
+    )
+    active_alerts = [
+        {
+            "id": a.id,
+            "severity": a.severity.value,
+            "status": a.status.value,
+            "message": a.message,
+            "created_at": a.created_at.isoformat(),
+        }
+        for a in alerts_rows
+    ]
+
+    # Latest QC verdict
+    latest_qc = (
+        db.query(QCResult)
+        .filter(QCResult.station_id == st.id)
+        .order_by(QCResult.id.desc())
+        .first()
+    )
+
+    if st.status != StationStatus.active or latest_reading is None:
+        health = StationHealthStatus.offline
+    elif len(active_alerts) > 0 or (latest_qc and latest_qc.verdict == QCVerdict.anomalous):
+        health = StationHealthStatus.anomalous
+    elif latest_qc and latest_qc.verdict == QCVerdict.suspect:
+        health = StationHealthStatus.suspect
+    else:
+        health = StationHealthStatus.healthy
+
+    return StationDetailResponse(
+        id=st.id,
+        station_code=st.station_code,
+        name=st.name,
+        latitude=st.latitude,
+        longitude=st.longitude,
+        elevation_m=st.elevation_m,
+        state=st.state,
+        district=st.district,
+        status=st.status,
+        health_status=health,
+        latest_reading=latest_reading,
+        latest_verdict=latest_qc.verdict if latest_qc else None,
+        active_alerts_count=len(active_alerts),
+        latest_fault_type=latest_qc.fault_type if latest_qc else None,
+        sensor_specs=st.sensor_specs or {},
+        recent_readings=recent_readings,
+        active_alerts=active_alerts,
+    )

@@ -1,10 +1,13 @@
 import React, { useEffect, useState } from 'react';
+import { Map, Server } from 'lucide-react';
 
 interface HeaderProps {
   systemHealthy: boolean | null;
+  activeTab: 'map' | 'system';
+  onTabChange: (tab: 'map' | 'system') => void;
 }
 
-export const Header: React.FC<HeaderProps> = ({ systemHealthy }) => {
+export const Header: React.FC<HeaderProps> = ({ systemHealthy, activeTab, onTabChange }) => {
   const [theme, setTheme] = useState<'light' | 'dark'>(() => {
     const saved = localStorage.getItem('aerosentinel-theme');
     if (saved === 'dark' || saved === 'light') return saved;
@@ -33,7 +36,33 @@ export const Header: React.FC<HeaderProps> = ({ systemHealthy }) => {
           </span>
         </div>
 
-        <div className="hidden md:flex items-center space-x-2 text-[0.8125rem] text-muted font-sans border-l border-line pl-6">
+        {/* Navigation Tabs */}
+        <nav className="flex items-center space-x-1 border-l border-line pl-6">
+          <button
+            onClick={() => onTabChange('map')}
+            className={`flex items-center space-x-1.5 px-3 py-1.5 rounded text-[0.8125rem] font-medium transition-colors ${
+              activeTab === 'map'
+                ? 'bg-accent text-white shadow-sm'
+                : 'text-muted hover:text-ink hover:bg-surface'
+            }`}
+          >
+            <Map className="w-3.5 h-3.5" />
+            <span>Fleet Map</span>
+          </button>
+          <button
+            onClick={() => onTabChange('system')}
+            className={`flex items-center space-x-1.5 px-3 py-1.5 rounded text-[0.8125rem] font-medium transition-colors ${
+              activeTab === 'system'
+                ? 'bg-accent text-white shadow-sm'
+                : 'text-muted hover:text-ink hover:bg-surface'
+            }`}
+          >
+            <Server className="w-3.5 h-3.5" />
+            <span>Architecture & Health</span>
+          </button>
+        </nav>
+
+        <div className="hidden lg:flex items-center space-x-2 text-[0.8125rem] text-muted font-sans border-l border-line pl-6">
           <span>System Status:</span>
           {systemHealthy === null ? (
             <span className="text-muted font-mono">CONNECTING</span>

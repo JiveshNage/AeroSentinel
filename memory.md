@@ -32,7 +32,7 @@ After finishing a feature: append to the changelog, flip its status in the Featu
 | F8 | Fault classifier (merge layer) | ✅ | Unified merge layer (rules + ML + spatial), 100% precision, 66.7% recall, F1=0.80 on benchmark, 10 tests. Concludes Phase 2 per phase.md. |
 | F9 | LSTM-Autoencoder upgrade | ⬜ | stretch |
 | F10 | Alerts service | ✅ | Alert service with severity mapping, 60-min deduplication, REST lifecycle API, and live WebSocket broadcast (/api/alerts/ws); 6 tests |
-| F11 | Dashboard: map view | ⬜ | |
+| F11 | Dashboard: map view | ✅ | Interactive Leaflet station health map with CARTO Dark Matter tiles, live WebSocket health updates (/api/alerts/ws), pulsing beacon markers, popups, state filters, and station roster; 6 tests |
 | F12 | Dashboard: station detail | ⬜ | |
 | F13 | Dashboard: alerts feed + feedback | ⬜ | |
 | F14 | Retraining job | ⬜ | |
@@ -43,6 +43,7 @@ After finishing a feature: append to the changelog, flip its status in the Featu
 ## Decision log
 *(Append-only. Each entry: date, decision, why, what alternative was rejected.)*
 
+- `2026-09-23` — Implemented F11 Dashboard Map View. Designed batch station health aggregation in backend/api/routes/stations.py using subqueries for latest telemetry, active alert counts, and QC verdicts, avoiding N+1 roundtrips. Integrated Leaflet map in frontend/src/components/StationMap.tsx using CARTO Dark Matter tiles matching design.md dark tokens. Implemented custom SVG divIcon markers with pulsing CSS animation for anomalous stations. Connected live WebSocket listener in MapView.tsx to /api/alerts/ws, dynamically updating station health markers without page reload.
 - `2026-09-23` — Implemented F10 Alerts Service in backend/alerts/service.py and backend/alerts/routes.py. Designed deterministic severity mapping (critical: high confidence >0.85, out-of-range extremes, spatial mismatch; warning: step/persistence; info: low confidence). Implemented 60-minute window deduplication/debouncing per (station, variable, reason_code) to prevent alert storms. Built ConnectionManager for live WebSocket broadcasts (/api/alerts/ws) and connected alert creation directly to the QC pipeline in run_full_qc_pipeline_for_reading.
 - `2026-09-23` — Implemented F8 Fault Classifier (Merge Layer) in backend/qc/classifier.py. Merged deterministic rules (F4), Isolation Forest ML anomaly scores (F6), and cross-station spatial consistency (F7) into unified explainable verdicts with calibrated confidence. Evaluated against multi-station benchmark dataset, boosting precision from 29.58% (raw ML) to 100.0% with 66.67% interval recall (100% spike, 62.5% flatline, 66.7% drift) and zero false alarms. Integrated run_full_qc_pipeline_for_reading into ingestion service.
 - `2026-09-23` — Implemented F7 Spatial Consistency Checker in backend/qc/spatial.py. Built 3D Earth Cartesian KDTree spatial index with radius filtering. Implemented batch queries for contemporaneous neighbor observations to eliminate N+1 queries. Successfully passed the critical SIH milestone test: isolated +14°C sensor fault detected as SPATIAL_MISMATCH (z > 3.0), while simultaneous regional +8°C heatwave across all neighbor stations verified as SPATIAL_CONSISTENT.
@@ -83,6 +84,7 @@ After finishing a feature: append to the changelog, flip its status in the Featu
 ## Changelog
 *(One line per completed feature or significant fix. Newest at top.)*
 
+- `2026-09-23` — F11 complete: Dashboard Map View implemented with interactive Leaflet station health map, CARTO Dark Matter tiles, live WebSocket health updates, pulsing beacon markers, popups, and state filters; 90/90 tests passing total.
 - `2026-09-23` — F10 complete: Alerts service implemented with deterministic severity mapping, 60-min deduplication window, REST lifecycle API, and live WebSocket broadcast (/api/alerts/ws); 84/84 tests passing total.
 - `2026-09-23` — F8 complete: Fault classifier merge layer implemented and benchmarked (100% precision, F1=0.80, 78/78 tests passing total). Concludes Phase 2 per phase.md.
 - `2026-09-23` — F7 complete: Spatial consistency checker implemented with 3D KDTree and batch neighbor queries; SIH regional extreme weather invariance verified (68/68 tests passing total).
@@ -98,7 +100,7 @@ After finishing a feature: append to the changelog, flip its status in the Featu
 When starting a new AI session, paste this filled-in block first:
 
 ```
-Current state: F10 Alerts service complete (84/84 tests passing). Next is F11 Dashboard: Map View (Leaflet station health map with real-time status and popup metrics).
+Current state: F11 Dashboard Map View complete (90/90 tests passing). Next is F12 Dashboard: Station Detail View (time-series Recharts with highlighted anomalous points and reason codes).
 Known issues: [pull from Known Issues section above]
 Do not re-litigate: [any settled architecture/tech decisions from Decision Log — don't let the AI suggest re-doing these without new evidence]
 ```
