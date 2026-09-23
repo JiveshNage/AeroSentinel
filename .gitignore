@@ -17,6 +17,7 @@ htmlcov/
 dist/
 build/
 *.egg-info/
+*.joblib
 
 # Node
 frontend/node_modules/

@@ -15,6 +15,10 @@ import {
   Send,
   Database,
   Info,
+  Cpu,
+  RotateCcw,
+  Sparkles,
+  Layers,
 } from 'lucide-react';
 import {
   AlertItem,
@@ -24,6 +28,15 @@ import {
   submitAlertFeedback,
   fetchFeedbackList,
 } from '../api/alerts';
+import {
+  fetchRetrainStats,
+  triggerRetraining,
+  fetchRegisteredModels,
+  activateModelVersion,
+  ModelRegistryItem,
+  RetrainResponse,
+  FeedbackPoolStats,
+} from '../api/retrain';
 
 interface AlertsFeedViewProps {
   onInspectStation?: (stationCode: string) => void;
@@ -54,10 +67,15 @@ export const AlertsFeedView: React.FC<AlertsFeedViewProps> = ({ onInspectStation
   const [submittingFeedbackId, setSubmittingFeedbackId] = useState<number | null>(null);
   const [feedbackSuccessMsg, setFeedbackSuccessMsg] = useState<{ alertId: number; text: string } | null>(null);
 
-  // Feedback Audit Log state
+  // Retraining & Model Registry State
   const [feedbackList, setFeedbackList] = useState<FeedbackItem[]>([]);
   const [loadingFeedback, setLoadingFeedback] = useState<boolean>(false);
   const [feedbackFilterLabel, setFeedbackFilterLabel] = useState<string>('ALL');
+  const [retrainStats, setRetrainStats] = useState<FeedbackPoolStats | null>(null);
+  const [registeredModels, setRegisteredModels] = useState<ModelRegistryItem[]>([]);
+  const [retrainingInProgress, setRetrainingInProgress] = useState<boolean>(false);
+  const [latestRetrainResult, setLatestRetrainResult] = useState<RetrainResponse | null>(null);
+  const [activatingModelId, setActivatingModelId] = useState<number | null>(null);
 
   // Load alerts from backend
   const loadAlerts = useCallback(async () => {
@@ -75,17 +93,23 @@ export const AlertsFeedView: React.FC<AlertsFeedViewProps> = ({ onInspectStation
     }
   }, []);
 
-  // Load feedback audit log
-  const loadFeedbackAudit = useCallback(async () => {
+  // Load retrain console data
+  const loadRetrainConsole = useCallback(async () => {
     setLoadingFeedback(true);
     try {
-      const data = await fetchFeedbackList({
-        limit: 100,
-        label: feedbackFilterLabel !== 'ALL' ? feedbackFilterLabel : undefined,
-      });
-      setFeedbackList(data.feedback);
+      const [statsData, modelsData, feedbackData] = await Promise.all([
+        fetchRetrainStats('temperature'),
+        fetchRegisteredModels('temperature'),
+        fetchFeedbackList({
+          limit: 100,
+          label: feedbackFilterLabel !== 'ALL' ? feedbackFilterLabel : undefined,
+        }),
+      ]);
+      setRetrainStats(statsData);
+      setRegisteredModels(modelsData.models);
+      setFeedbackList(feedbackData.feedback);
     } catch (err: unknown) {
-      console.error('Failed to load feedback list:', err);
+      console.error('Failed to load retrain console data:', err);
     } finally {
       setLoadingFeedback(false);
     }
@@ -97,9 +121,36 @@ export const AlertsFeedView: React.FC<AlertsFeedViewProps> = ({ onInspectStation
 
   useEffect(() => {
     if (activeSubTab === 'audit') {
-      loadFeedbackAudit();
+      loadRetrainConsole();
     }
-  }, [activeSubTab, loadFeedbackAudit]);
+  }, [activeSubTab, loadRetrainConsole]);
+
+  // Handle triggering retraining
+  const handleTriggerRetrain = async () => {
+    setRetrainingInProgress(true);
+    try {
+      const result = await triggerRetraining({ variable: 'temperature' });
+      setLatestRetrainResult(result);
+      await loadRetrainConsole();
+    } catch (err: unknown) {
+      alert(`Retraining failed: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setRetrainingInProgress(false);
+    }
+  };
+
+  // Handle activating model version
+  const handleActivateModel = async (modelId: number) => {
+    setActivatingModelId(modelId);
+    try {
+      await activateModelVersion(modelId);
+      await loadRetrainConsole();
+    } catch (err: unknown) {
+      alert(`Model activation failed: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setActivatingModelId(null);
+    }
+  };
 
   // Connect to live WebSocket stream
   useEffect(() => {
@@ -322,7 +373,7 @@ export const AlertsFeedView: React.FC<AlertsFeedViewProps> = ({ onInspectStation
             </div>
 
             <button
-              onClick={activeSubTab === 'feed' ? loadAlerts : loadFeedbackAudit}
+              onClick={activeSubTab === 'feed' ? loadAlerts : loadRetrainConsole}
               className="flex items-center space-x-1.5 px-3 py-1.5 rounded border border-line bg-surface hover:bg-panel text-ink text-[0.8125rem] font-sans transition-colors"
               title="Refresh dataset"
             >
@@ -711,111 +762,304 @@ export const AlertsFeedView: React.FC<AlertsFeedViewProps> = ({ onInspectStation
         </div>
       )}
 
-      {/* SUBTAB 2: OPERATOR RETRAINING AUDIT LOG */}
+      {/* SUBTAB 2: MODEL RETRAINING & GOVERNANCE CONSOLE (PHASE 4) */}
       {activeSubTab === 'audit' && (
-        <div className="bg-panel border border-line rounded p-5 space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div>
-              <h3 className="text-[1rem] font-semibold text-ink font-sans flex items-center space-x-2">
-                <Database className="w-4 h-4 text-accent" />
-                <span>Operator Feedback Registry (Continuous Retraining Pool)</span>
-              </h3>
-              <p className="text-[0.8125rem] text-muted font-sans mt-0.5">
-                Each verified decision links to a QC verdict row in the database, acting as ground truth for Phase 4 ML Isolation Forest & threshold calibration retraining.
-              </p>
+        <div className="space-y-6">
+          {/* Top Governance Control Bar */}
+          <div className="bg-panel border border-line rounded p-5 space-y-4">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div>
+                <div className="flex items-center space-x-2">
+                  <span className="text-[0.75rem] font-mono uppercase tracking-wider text-accent font-semibold">
+                    Phase 4 Learning Loop
+                  </span>
+                  <span className="text-line">•</span>
+                  <span className="text-[0.75rem] font-mono text-muted">Feature F14 (Model Retraining Job)</span>
+                </div>
+                <h3 className="text-[1.25rem] font-semibold text-ink mt-1 font-sans flex items-center space-x-2">
+                  <Cpu className="w-5 h-5 text-accent" />
+                  <span>Model Retraining & Governance Console</span>
+                </h3>
+                <p className="text-[0.875rem] text-muted font-sans mt-0.5 max-w-3xl">
+                  Automated semi-supervised continuous learning loop. Incorporates operator ground-truth decisions into the training baseline, calibrates anomaly decision boundaries, and eliminates verified false alarms.
+                </p>
+              </div>
+
+              {/* Retrain Action Button */}
+              <div className="flex items-center space-x-3">
+                <button
+                  disabled={retrainingInProgress}
+                  onClick={handleTriggerRetrain}
+                  className="flex items-center space-x-2 px-4 py-2 bg-accent hover:bg-accent/90 disabled:opacity-50 text-white rounded text-[0.8125rem] font-sans font-medium transition-colors shadow-sm"
+                >
+                  <Sparkles className={`w-4 h-4 ${retrainingInProgress ? 'animate-spin' : ''}`} />
+                  <span>{retrainingInProgress ? 'Retraining Models...' : 'Trigger Continuous Retrain'}</span>
+                </button>
+              </div>
             </div>
 
-            {/* Label filter */}
-            <div className="flex items-center space-x-2">
-              <span className="text-[0.75rem] font-mono text-muted uppercase">Filter:</span>
-              {['ALL', 'confirmed_fault', 'false_alarm', 'unsure'].map((lbl) => (
-                <button
-                  key={lbl}
-                  onClick={() => setFeedbackFilterLabel(lbl)}
-                  className={`px-2.5 py-1 rounded text-[0.6875rem] font-mono uppercase transition-colors ${
-                    feedbackFilterLabel === lbl
-                      ? 'bg-ink text-surface'
-                      : 'bg-surface text-muted border border-line hover:text-ink'
-                  }`}
-                >
-                  {lbl.replace('_', ' ')}
-                </button>
-              ))}
+            {/* Metric Status Tiles */}
+            <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 pt-3 border-t border-line">
+              <div className="p-3 bg-surface border border-line rounded">
+                <span className="text-[0.75rem] font-mono text-muted uppercase">Active Production Version</span>
+                <div className="text-[1.25rem] font-mono font-semibold text-ink mt-0.5 flex items-center space-x-2">
+                  <span>{retrainStats?.active_model_version || 'v1.0.0'}</span>
+                  <span className="w-2 h-2 rounded-full bg-status-valid inline-block" />
+                </div>
+              </div>
+
+              <div className="p-3 bg-surface border border-line rounded">
+                <span className="text-[0.75rem] font-mono text-amber-500 uppercase">False Alarms to Eliminate</span>
+                <div className="text-[1.25rem] font-mono font-semibold text-amber-500 mt-0.5">
+                  {retrainStats?.false_alarms_count ?? 0}
+                </div>
+              </div>
+
+              <div className="p-3 bg-surface border border-line rounded">
+                <span className="text-[0.75rem] font-mono text-status-valid uppercase">Confirmed Faults to Retain</span>
+                <div className="text-[1.25rem] font-mono font-semibold text-status-valid mt-0.5">
+                  {retrainStats?.confirmed_faults_count ?? 0}
+                </div>
+              </div>
+
+              <div className="p-3 bg-surface border border-line rounded">
+                <span className="text-[0.75rem] font-mono text-muted uppercase">Total Ground-Truth Labels</span>
+                <div className="text-[1.25rem] font-mono font-semibold text-ink mt-0.5">
+                  {retrainStats?.total_feedback_count ?? 0}
+                </div>
+              </div>
             </div>
           </div>
 
-          {loadingFeedback ? (
-            <div className="p-8 text-center text-muted font-mono text-[0.875rem]">
-              Loading feedback audit records...
-            </div>
-          ) : feedbackList.length === 0 ? (
-            <div className="p-8 text-center text-muted font-sans space-y-1">
-              <Info className="w-6 h-6 text-muted mx-auto mb-2" />
-              <p className="font-semibold text-ink">No Feedback Logged Yet</p>
-              <p className="text-[0.8125rem]">
-                Submit ground-truth labels on active alerts in the Operational Feed to populate this retraining audit pool.
+          {/* Retrain Result Success Banner */}
+          {latestRetrainResult && (
+            <div className="bg-status-valid/10 border border-status-valid/40 rounded p-4 space-y-2">
+              <div className="flex items-center space-x-2 text-status-valid font-sans font-semibold text-[0.9375rem]">
+                <CheckCircle2 className="w-5 h-5" />
+                <span>Model Retraining Succeeded & Activated in Production!</span>
+              </div>
+              <p className="text-[0.8125rem] text-ink font-mono">
+                {latestRetrainResult.message}
               </p>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-2 text-[0.75rem] font-mono">
+                <div className="p-2 bg-panel rounded border border-status-valid/30">
+                  <span className="text-muted block">Activated Model</span>
+                  <span className="text-ink font-bold">{latestRetrainResult.new_version}</span>
+                </div>
+                <div className="p-2 bg-panel rounded border border-status-valid/30">
+                  <span className="text-muted block">False Alarm Reduction</span>
+                  <span className="text-status-valid font-bold">
+                    {latestRetrainResult.metrics.false_alarm_reduction_pct}%
+                  </span>
+                </div>
+                <div className="p-2 bg-panel rounded border border-status-valid/30">
+                  <span className="text-muted block">Calibrated Threshold</span>
+                  <span className="text-ink font-bold">
+                    {latestRetrainResult.metrics.previous_threshold} → {latestRetrainResult.metrics.new_threshold}
+                  </span>
+                </div>
+                <div className="p-2 bg-panel rounded border border-status-valid/30">
+                  <span className="text-muted block">Training Samples</span>
+                  <span className="text-ink font-bold">
+                    {latestRetrainResult.metrics.total_training_samples} rows
+                  </span>
+                </div>
+              </div>
             </div>
-          ) : (
+          )}
+
+          {/* Section 1: Model Registry Audit History */}
+          <div className="bg-panel border border-line rounded p-5 space-y-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <h4 className="text-[1rem] font-semibold text-ink font-sans flex items-center space-x-2">
+                  <Layers className="w-4 h-4 text-accent" />
+                  <span>Model Registry Versions & Rollback</span>
+                </h4>
+                <p className="text-[0.8125rem] text-muted font-sans mt-0.5">
+                  Audit log of trained Isolation Forest bundles. Active model is highlighted; previous models can be reactivated instantly.
+                </p>
+              </div>
+
+              <span className="text-[0.75rem] font-mono text-muted">
+                {registeredModels.length} Versions Recorded
+              </span>
+            </div>
+
             <div className="overflow-x-auto border border-line rounded">
               <table className="w-full text-left text-[0.8125rem] font-sans">
                 <thead className="bg-surface border-b border-line text-muted font-mono text-[0.6875rem] uppercase">
                   <tr>
-                    <th className="py-2.5 px-3">Feedback ID</th>
-                    <th className="py-2.5 px-3">QC Result ID</th>
-                    <th className="py-2.5 px-3">Station</th>
+                    <th className="py-2.5 px-3">Registry ID</th>
+                    <th className="py-2.5 px-3">Model Type</th>
                     <th className="py-2.5 px-3">Variable</th>
-                    <th className="py-2.5 px-3">Operator Decision</th>
-                    <th className="py-2.5 px-3">Notes</th>
-                    <th className="py-2.5 px-3">Auditor</th>
-                    <th className="py-2.5 px-3">Timestamp</th>
+                    <th className="py-2.5 px-3">Version</th>
+                    <th className="py-2.5 px-3">Status</th>
+                    <th className="py-2.5 px-3">False Alarm Reduction</th>
+                    <th className="py-2.5 px-3">Trained At</th>
+                    <th className="py-2.5 px-3 text-right">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-line text-ink">
-                  {feedbackList.map((item) => (
-                    <tr key={item.id} className="hover:bg-surface/50">
-                      <td className="py-2 px-3 font-mono text-muted">#{item.id}</td>
-                      <td className="py-2 px-3 font-mono text-accent">qc_{item.qc_result_id}</td>
-                      <td className="py-2 px-3 font-medium">
-                        {item.station_code || 'N/A'}
-                        {item.station_name ? ` · ${item.station_name}` : ''}
-                      </td>
-                      <td className="py-2 px-3 font-mono uppercase text-muted">
-                        {item.variable || 'N/A'}
-                      </td>
-                      <td className="py-2 px-3 font-mono">
-                        {item.label === 'confirmed_fault' ? (
-                          <span className="inline-flex items-center space-x-1 text-status-valid font-semibold">
-                            <CheckCircle2 className="w-3 h-3" />
-                            <span>CONFIRMED FAULT</span>
-                          </span>
-                        ) : item.label === 'false_alarm' ? (
-                          <span className="inline-flex items-center space-x-1 text-amber-500 font-semibold">
-                            <AlertTriangle className="w-3 h-3" />
-                            <span>FALSE ALARM</span>
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center space-x-1 text-blue-500 font-semibold">
-                            <HelpCircle className="w-3 h-3" />
-                            <span>UNSURE</span>
-                          </span>
-                        )}
-                      </td>
-                      <td className="py-2 px-3 text-muted max-w-xs truncate" title={item.notes || ''}>
-                        {item.notes || '—'}
-                      </td>
-                      <td className="py-2 px-3 text-muted font-mono text-[0.75rem]">
-                        {item.user_email || 'operator@aerosentinel.gov.in'}
-                      </td>
-                      <td className="py-2 px-3 font-mono text-muted text-[0.75rem]">
-                        {new Date(item.created_at).toLocaleString()}
-                      </td>
-                    </tr>
-                  ))}
+                  {registeredModels.map((m) => {
+                    const reduction = m.metrics?.false_alarm_reduction_pct;
+                    const isActivating = activatingModelId === m.id;
+
+                    return (
+                      <tr key={m.id} className={m.is_active ? 'bg-accent/5' : 'hover:bg-surface/50'}>
+                        <td className="py-2 px-3 font-mono text-muted">#{m.id}</td>
+                        <td className="py-2 px-3 font-mono capitalize">{m.model_type.replace('_', ' ')}</td>
+                        <td className="py-2 px-3 font-mono uppercase text-accent font-semibold">{m.variable}</td>
+                        <td className="py-2 px-3 font-mono font-semibold">{m.version}</td>
+                        <td className="py-2 px-3">
+                          {m.is_active ? (
+                            <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded text-[0.6875rem] font-mono bg-status-valid/15 text-status-valid border border-status-valid/30 font-semibold">
+                              <span className="w-1.5 h-1.5 rounded-full bg-status-valid" />
+                              <span>ACTIVE</span>
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded text-[0.6875rem] font-mono bg-surface text-muted border border-line">
+                              STANDBY
+                            </span>
+                          )}
+                        </td>
+                        <td className="py-2 px-3 font-mono">
+                          {reduction !== undefined ? (
+                            <span className="text-status-valid font-semibold">{reduction}%</span>
+                          ) : (
+                            <span className="text-muted">Baseline</span>
+                          )}
+                        </td>
+                        <td className="py-2 px-3 font-mono text-muted text-[0.75rem]">
+                          {new Date(m.trained_at).toLocaleString()}
+                        </td>
+                        <td className="py-2 px-3 text-right">
+                          {!m.is_active ? (
+                            <button
+                              disabled={isActivating}
+                              onClick={() => handleActivateModel(m.id)}
+                              className="inline-flex items-center space-x-1 px-2.5 py-1 text-[0.75rem] font-sans font-medium text-ink bg-surface hover:bg-panel border border-line rounded transition-colors"
+                            >
+                              <RotateCcw className="w-3 h-3" />
+                              <span>{isActivating ? 'Activating...' : 'Rollback / Activate'}</span>
+                            </button>
+                          ) : (
+                            <span className="text-[0.75rem] font-mono text-muted">Serving Live</span>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
-          )}
+          </div>
+
+          {/* Section 2: Operator Feedback Ground-Truth Registry */}
+          <div className="bg-panel border border-line rounded p-5 space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <h4 className="text-[1rem] font-semibold text-ink font-sans flex items-center space-x-2">
+                  <Database className="w-4 h-4 text-accent" />
+                  <span>Ground-Truth Feedback Log (Retraining Training Set)</span>
+                </h4>
+                <p className="text-[0.8125rem] text-muted font-sans mt-0.5">
+                  Raw operator decisions from operational alerts used as ground truth for model retraining.
+                </p>
+              </div>
+
+              {/* Label filter */}
+              <div className="flex items-center space-x-2">
+                <span className="text-[0.75rem] font-mono text-muted uppercase">Filter:</span>
+                {['ALL', 'confirmed_fault', 'false_alarm', 'unsure'].map((lbl) => (
+                  <button
+                    key={lbl}
+                    onClick={() => setFeedbackFilterLabel(lbl)}
+                    className={`px-2.5 py-1 rounded text-[0.6875rem] font-mono uppercase transition-colors ${
+                      feedbackFilterLabel === lbl
+                        ? 'bg-ink text-surface'
+                        : 'bg-surface text-muted border border-line hover:text-ink'
+                    }`}
+                  >
+                    {lbl.replace('_', ' ')}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {loadingFeedback ? (
+              <div className="p-8 text-center text-muted font-mono text-[0.875rem]">
+                Loading feedback records...
+              </div>
+            ) : feedbackList.length === 0 ? (
+              <div className="p-8 text-center text-muted font-sans space-y-1">
+                <Info className="w-6 h-6 text-muted mx-auto mb-2" />
+                <p className="font-semibold text-ink">No Feedback Logged Yet</p>
+                <p className="text-[0.8125rem]">
+                  Submit ground-truth labels on active alerts in the Operational Feed to populate this retraining pool.
+                </p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto border border-line rounded">
+                <table className="w-full text-left text-[0.8125rem] font-sans">
+                  <thead className="bg-surface border-b border-line text-muted font-mono text-[0.6875rem] uppercase">
+                    <tr>
+                      <th className="py-2.5 px-3">Feedback ID</th>
+                      <th className="py-2.5 px-3">QC Result ID</th>
+                      <th className="py-2.5 px-3">Station</th>
+                      <th className="py-2.5 px-3">Variable</th>
+                      <th className="py-2.5 px-3">Operator Decision</th>
+                      <th className="py-2.5 px-3">Notes</th>
+                      <th className="py-2.5 px-3">Auditor</th>
+                      <th className="py-2.5 px-3">Timestamp</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-line text-ink">
+                    {feedbackList.map((item) => (
+                      <tr key={item.id} className="hover:bg-surface/50">
+                        <td className="py-2 px-3 font-mono text-muted">#{item.id}</td>
+                        <td className="py-2 px-3 font-mono text-accent">qc_{item.qc_result_id}</td>
+                        <td className="py-2 px-3 font-medium">
+                          {item.station_code || 'N/A'}
+                          {item.station_name ? ` · ${item.station_name}` : ''}
+                        </td>
+                        <td className="py-2 px-3 font-mono uppercase text-muted">
+                          {item.variable || 'N/A'}
+                        </td>
+                        <td className="py-2 px-3 font-mono">
+                          {item.label === 'confirmed_fault' ? (
+                            <span className="inline-flex items-center space-x-1 text-status-valid font-semibold">
+                              <CheckCircle2 className="w-3 h-3" />
+                              <span>CONFIRMED FAULT</span>
+                            </span>
+                          ) : item.label === 'false_alarm' ? (
+                            <span className="inline-flex items-center space-x-1 text-amber-500 font-semibold">
+                              <AlertTriangle className="w-3 h-3" />
+                              <span>FALSE ALARM</span>
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center space-x-1 text-blue-500 font-semibold">
+                              <HelpCircle className="w-3 h-3" />
+                              <span>UNSURE</span>
+                            </span>
+                          )}
+                        </td>
+                        <td className="py-2 px-3 text-muted max-w-xs truncate" title={item.notes || ''}>
+                          {item.notes || '—'}
+                        </td>
+                        <td className="py-2 px-3 text-muted font-mono text-[0.75rem]">
+                          {item.user_email || 'operator@aerosentinel.gov.in'}
+                        </td>
+                        <td className="py-2 px-3 font-mono text-muted text-[0.75rem]">
+                          {new Date(item.created_at).toLocaleString()}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
         </div>
       )}
     </div>

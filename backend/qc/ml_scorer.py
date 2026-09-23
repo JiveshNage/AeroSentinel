@@ -348,10 +348,21 @@ def register_model_bundle(
 _MODEL_CACHE: Dict[str, ModelBundle] = {}
 
 
-def get_active_model_bundle(variable: str) -> Optional[ModelBundle]:
-    """Retrieve model bundle from memory cache or disk artifact."""
+def get_active_model_bundle(variable: str, db: Optional[Session] = None) -> Optional[ModelBundle]:
+    """Retrieve model bundle from memory cache, database active registry, or disk artifact."""
     if variable in _MODEL_CACHE:
         return _MODEL_CACHE[variable]
+
+    if db:
+        active_reg = (
+            db.query(ModelRegistry)
+            .filter(ModelRegistry.variable == variable, ModelRegistry.is_active == True)
+            .first()
+        )
+        if active_reg and active_reg.artifact_path and Path(active_reg.artifact_path).exists():
+            bundle = ModelBundle.load(Path(active_reg.artifact_path))
+            _MODEL_CACHE[variable] = bundle
+            return bundle
 
     artifact_file = ARTIFACTS_DIR / f"{variable}_iforest.joblib"
     if artifact_file.exists():
@@ -390,7 +401,7 @@ def run_ml_scoring_for_reading(db: Session, reading_id: int) -> List[QCResult]:
     results: List[QCResult] = []
 
     for var_name in ["temperature", "humidity"]:
-        bundle = get_active_model_bundle(var_name)
+        bundle = get_active_model_bundle(var_name, db=db)
         if not bundle:
             continue
 
