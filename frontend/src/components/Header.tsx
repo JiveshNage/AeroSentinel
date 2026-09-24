@@ -1,10 +1,10 @@
 import React, { useEffect, useState } from 'react';
-import { Map, Server, Activity, ShieldAlert } from 'lucide-react';
+import { Map, Server, Activity, ShieldAlert, Wrench } from 'lucide-react';
 
 interface HeaderProps {
   systemHealthy: boolean | null;
-  activeTab: 'map' | 'detail' | 'alerts' | 'system';
-  onTabChange: (tab: 'map' | 'detail' | 'alerts' | 'system') => void;
+  activeTab: 'map' | 'detail' | 'alerts' | 'maintenance' | 'system';
+  onTabChange: (tab: 'map' | 'detail' | 'alerts' | 'maintenance' | 'system') => void;
   activeAlertsCount?: number;
 }
 
@@ -81,6 +81,17 @@ export const Header: React.FC<HeaderProps> = ({
                 {activeAlertsCount}
               </span>
             )}
+          </button>
+          <button
+            onClick={() => onTabChange('maintenance')}
+            className={`flex items-center space-x-1.5 px-3 py-1.5 rounded text-[0.8125rem] font-medium transition-colors ${
+              activeTab === 'maintenance'
+                ? 'bg-accent text-white shadow-sm'
+                : 'text-muted hover:text-ink hover:bg-surface'
+            }`}
+          >
+            <Wrench className="w-3.5 h-3.5" />
+            <span>Maintenance Queue</span>
           </button>
           <button
             onClick={() => onTabChange('system')}

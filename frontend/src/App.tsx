@@ -4,11 +4,12 @@ import { HealthCard } from './components/HealthCard';
 import { MapView } from './pages/MapView';
 import { StationDetailView } from './pages/StationDetailView';
 import { AlertsFeedView } from './pages/AlertsFeedView';
+import { MaintenanceView } from './pages/MaintenanceView';
 import { fetchHealth, HealthResponse } from './api/client';
 import { fetchAlerts } from './api/alerts';
 
 export const App: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<'map' | 'detail' | 'alerts' | 'system'>('map');
+  const [activeTab, setActiveTab] = useState<'map' | 'detail' | 'alerts' | 'maintenance' | 'system'>('map');
   const [selectedStationCode, setSelectedStationCode] = useState<string>('NCR001');
   const [healthData, setHealthData] = useState<HealthResponse | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
@@ -75,6 +76,13 @@ export const App: React.FC = () => {
           />
         ) : activeTab === 'alerts' ? (
           <AlertsFeedView
+            onInspectStation={(code) => {
+              setSelectedStationCode(code);
+              setActiveTab('detail');
+            }}
+          />
+        ) : activeTab === 'maintenance' ? (
+          <MaintenanceView
             onInspectStation={(code) => {
               setSelectedStationCode(code);
               setActiveTab('detail');
