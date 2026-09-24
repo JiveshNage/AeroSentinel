@@ -26,6 +26,7 @@ from sqlalchemy import desc
 from storage.models import Station, RawReading, QCResult, QCVerdict
 from qc.rules import evaluate_reading_rules, MONITORED_VARIABLES
 from qc.ml_scorer import get_active_model_bundle, score_reading
+from qc.lstm_scorer import get_active_lstm_bundle, score_sequence
 from qc.spatial import evaluate_spatial_for_reading
 
 
@@ -95,7 +96,9 @@ def classify_verdict(
         else:
             # Spatial data unavailable or insufficient (e.g. isolated station)
             if ml_score >= 0.75:
-                return QCVerdict.anomalous, "drift", "ML_ISOFOREST", ml_confidence, merged_details
+                model_type = ml_details.get("model_type") if ml_details else None
+                reason = "ML_LSTM_AE" if model_type == "lstm_autoencoder" else "ML_ISOFOREST"
+                return QCVerdict.anomalous, "drift", reason, ml_confidence, merged_details
             else:
                 return QCVerdict.suspect, "drift", "ML_BORDERLINE", 0.65, merged_details
 
@@ -163,11 +166,22 @@ def run_full_qc_pipeline_for_reading(
 
         r_res = rules_by_var.get(var_name)
 
-        # Tier 2: ML Scorer
+        # Tier 2: ML Scorer (LSTM-Autoencoder preferred if active, fallback to Isolation Forest)
+        lstm_bundle = get_active_lstm_bundle(var_name, db=db)
         ml_bundle = get_active_model_bundle(var_name)
         ml_is_anom, ml_score, ml_conf, ml_details = False, 0.0, 0.5, {}
         ml_version = None
-        if ml_bundle:
+
+        if lstm_bundle:
+            ml_version = lstm_bundle.version
+            prior_vals = [getattr(pr, var_name) for pr in prior_readings if getattr(pr, var_name) is not None]
+            ml_is_anom, ml_score, ml_conf, ml_details = score_sequence(
+                bundle=lstm_bundle,
+                current_value=val,
+                prior_values=prior_vals,
+                timestamp=reading.timestamp,
+            )
+        elif ml_bundle:
             ml_version = ml_bundle.version
             prior_vals = [getattr(pr, var_name) for pr in prior_readings if getattr(pr, var_name) is not None]
             ml_is_anom, ml_score, ml_conf, ml_details = score_reading(
@@ -294,10 +308,13 @@ def evaluate_classifier_benchmark(
                 if len(prior_dummy_readings) > 20:
                     prior_dummy_readings.pop(0)
 
-                # Evaluate ML
+                # Evaluate ML (LSTM preferred if present, fallback to Isolation Forest)
+                lstm_bundle = get_active_lstm_bundle(variable)
                 ml_bundle = get_active_model_bundle(variable)
                 ml_anom, ml_sc, ml_cf, ml_dt = False, 0.0, 0.5, {}
-                if ml_bundle:
+                if lstm_bundle:
+                    ml_anom, ml_sc, ml_cf, ml_dt = score_sequence(lstm_bundle, val, prior_vals, pd.to_datetime(ts))
+                elif ml_bundle:
                     ml_anom, ml_sc, ml_cf, ml_dt = score_reading(ml_bundle, val, prior_vals, pd.to_datetime(ts))
 
                 # Contemporaneous neighbor values from benchmark_df at same timestamp

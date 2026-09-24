@@ -1,0 +1,44 @@
+{
+  "variable": "temperature",
+  "evaluated_at": "2026-09-24T05:47:11.815117+00:00",
+  "total_eval_samples": 233,
+  "overall": {
+    "isolation_forest": {
+      "precision": 0.3091,
+      "recall": 0.5152,
+      "f1": 0.3864
+    },
+    "lstm_autoencoder": {
+      "precision": 0.2095,
+      "recall": 0.9394,
+      "f1": 0.3426
+    }
+  },
+  "per_fault_type_comparison": {
+    "drift": {
+      "ground_truth_count": 24,
+      "isolation_forest_recall": 0.375,
+      "lstm_ae_recall": 0.9167,
+      "improvement_pct": 54.2
+    },
+    "flatline": {
+      "ground_truth_count": 8,
+      "isolation_forest_recall": 0.875,
+      "lstm_ae_recall": 1.0,
+      "improvement_pct": 12.5
+    },
+    "spike": {
+      "ground_truth_count": 1,
+      "isolation_forest_recall": 1.0,
+      "lstm_ae_recall": 1.0,
+      "improvement_pct": 0.0
+    },
+    "valid": {
+      "ground_truth_count": 0,
+      "isolation_forest_recall": 1.0,
+      "lstm_ae_recall": 1.0,
+      "improvement_pct": 0.0
+    }
+  },
+  "phase_5_exit_criterion_met": true
+}
