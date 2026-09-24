@@ -38,10 +38,13 @@ export const StationMap: React.FC<StationMapProps> = ({
       attributionControl: true,
     });
 
-    // Dark Matter tile layer from CARTO
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-      maxZoom: 18,
-      subdomains: 'abcd',
+    // Basemap tile layer from CARTO Voyager (with API key)
+    const cartoTileUrl =
+      import.meta.env.VITE_CARTO_TILE_URL ||
+      'https://basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png?key=cb1_3wto_1_98681061742df32c284b0e0b';
+
+    L.tileLayer(cartoTileUrl, {
+      maxZoom: 19,
       attribution:
         '&copy; <a href="https://carto.com/">CARTO</a> &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
     }).addTo(map);

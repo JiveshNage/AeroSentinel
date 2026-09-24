@@ -57,3 +57,28 @@ class BatchIngestResponse(BaseModel):
     ingested: int = Field(..., description="Count of newly persisted readings")
     duplicates_skipped: int = Field(..., description="Count of duplicate readings skipped")
     reading_ids: List[int] = Field(default_factory=list, description="IDs of newly inserted readings")
+
+
+class FileRowPreview(BaseModel):
+    station_code: str
+    timestamp: str
+    temperature: Optional[float] = None
+    humidity: Optional[float] = None
+    pressure: Optional[float] = None
+    wind_speed: Optional[float] = None
+    rainfall: Optional[float] = None
+    qc_verdict: Optional[str] = "valid"
+    fault_type: Optional[str] = None
+
+
+class FileUploadResponse(BaseModel):
+    status: str
+    filename: str
+    total_rows: int
+    ingested_count: int
+    duplicates_skipped: int
+    anomalies_detected: int
+    stations_affected: List[str] = []
+    preview: List[FileRowPreview] = []
+    message: str
+

@@ -201,6 +201,154 @@ def seed_database(db: Session = None) -> int:
                 )
                 db.add(new_user)
 
+        # 4. Seed operational tasks partitioned by RBAC role
+        from storage.models import SystemTask
+        existing_tasks_count = db.query(SystemTask).count()
+        if existing_tasks_count == 0:
+            seed_tasks = [
+                # Admin (Governance, fleet models, system config)
+                {
+                    "title": "Quarterly IsolationForest Model Drift Evaluation",
+                    "description": "Evaluate recent telemetry distribution against baseline models and retrain temperature & pressure anomaly detectors.",
+                    "assigned_role": "admin",
+                    "priority": "high",
+                    "status": "in_progress",
+                    "category": "governance",
+                    "station_code": "ALL",
+                    "assigned_to_name": "Dr. R. Sharma",
+                    "due_date": "2026-10-05",
+                    "notes": "Verify F1-score improvement on synthetic fault benchmarks.",
+                },
+                {
+                    "title": "Audit Ingestion Throughput & Redis Latency",
+                    "description": "Inspect daily volume metrics, verify TimescaleDB compression policies, and audit API key usage across IMD gateways.",
+                    "assigned_role": "admin",
+                    "priority": "medium",
+                    "status": "pending",
+                    "category": "governance",
+                    "station_code": "ALL",
+                    "assigned_to_name": "Dr. R. Sharma",
+                    "due_date": "2026-10-12",
+                    "notes": "Ensure p99 ingestion latency remains under 50ms.",
+                },
+                # Data Quality Officer (QC Triage, anomaly verification, false alarms)
+                {
+                    "title": "Investigate Severe Temperature Spike (+48.2°C) on NCR001",
+                    "description": "Examine step-change test failure on Safdarjung sensor. Cross-reference with neighboring stations NCR002 and NCR003.",
+                    "assigned_role": "data_quality_officer",
+                    "priority": "critical",
+                    "status": "in_progress",
+                    "category": "quality_control",
+                    "station_code": "NCR001",
+                    "assigned_to_name": "A. Verma",
+                    "due_date": "2026-09-25",
+                    "notes": "Suspected localized thermal pocket or direct radiation shielding displacement.",
+                },
+                {
+                    "title": "Verify Spatial Discrepancy on NCR003 Noida Sensor",
+                    "description": "3D KDTree spatial check flagged 4.1-sigma residual against surrounding regional cluster.",
+                    "assigned_role": "data_quality_officer",
+                    "priority": "high",
+                    "status": "pending",
+                    "category": "quality_control",
+                    "station_code": "NCR003",
+                    "assigned_to_name": "A. Verma",
+                    "due_date": "2026-09-26",
+                    "notes": "Compare with satellite thermal infrared band over Gautam Buddh Nagar.",
+                },
+                {
+                    "title": "Triage Pressure Sensor Flatline Anomaly on NCR005",
+                    "description": "Continuous 1012.4 hPa reading for 18 consecutive intervals. Verify sensor telemetry stream.",
+                    "assigned_role": "data_quality_officer",
+                    "priority": "high",
+                    "status": "pending",
+                    "category": "quality_control",
+                    "station_code": "NCR005",
+                    "assigned_to_name": "A. Verma",
+                    "due_date": "2026-09-27",
+                    "notes": "Likely analog-to-digital converter freeze or serial bus hang.",
+                },
+                # Field Technician (Hardware repair, sensor calibration, battery check)
+                {
+                    "title": "Emergency Battery & Solar Array Service on NCR010 Alwar",
+                    "description": "Predictive maintenance model indicates 89% failure probability due to voltage degradation under cloudy conditions.",
+                    "assigned_role": "field_technician",
+                    "priority": "critical",
+                    "status": "in_progress",
+                    "category": "maintenance",
+                    "station_code": "NCR010",
+                    "assigned_to_name": "K. Singh",
+                    "due_date": "2026-09-26",
+                    "notes": "Carry replacement 12V 40Ah AGM deep-cycle battery and 50W photovoltaic panel.",
+                },
+                {
+                    "title": "Recalibrate Ultrasonic Anemometer on NCR002 Gurugram",
+                    "description": "Wind speed readings exhibiting high step-test variance after seasonal dust storm.",
+                    "assigned_role": "field_technician",
+                    "priority": "high",
+                    "status": "pending",
+                    "category": "maintenance",
+                    "station_code": "NCR002",
+                    "assigned_to_name": "K. Singh",
+                    "due_date": "2026-09-28",
+                    "notes": "Inspect acoustic transducers for grit accumulation and re-level mast mount.",
+                },
+                {
+                    "title": "Pluviometer Funnel Silt Clearance on NCR012 Palwal",
+                    "description": "Tipping bucket rain gauge reporting zero accumulation during recorded regional precipitation.",
+                    "assigned_role": "field_technician",
+                    "priority": "medium",
+                    "status": "completed",
+                    "category": "maintenance",
+                    "station_code": "NCR012",
+                    "assigned_to_name": "K. Singh",
+                    "due_date": "2026-09-22",
+                    "notes": "Cleaned organic debris from siphon orifice; calibrated tipping bucket mechanism.",
+                },
+                # Forecaster (Synoptic validation, severe weather advisory, cross-station trends)
+                {
+                    "title": "Synoptic Western Disturbance Squall Line Tracking",
+                    "description": "Correlate barometric pressure drop gradients across western stations NCR007, NCR008, NCR010.",
+                    "assigned_role": "forecaster",
+                    "priority": "critical",
+                    "status": "in_progress",
+                    "category": "forecasting",
+                    "station_code": "NCR007",
+                    "assigned_to_name": "P. Nair",
+                    "due_date": "2026-09-25",
+                    "notes": "Prepare regional micro-climate advisory for Delhi NCR aviation corridor.",
+                },
+                {
+                    "title": "Validate Regional Heatwave Gradient across Haryana Sector",
+                    "description": "Review maximum 2-meter air temperature values against Doppler radar boundary layer estimates.",
+                    "assigned_role": "forecaster",
+                    "priority": "medium",
+                    "status": "pending",
+                    "category": "forecasting",
+                    "station_code": "NCR011",
+                    "assigned_to_name": "P. Nair",
+                    "due_date": "2026-09-29",
+                    "notes": "Verify heat index calculations for public weather bulletins.",
+                },
+            ]
+            for t_data in seed_tasks:
+                task = SystemTask(
+                    id=uuid.uuid4(),
+                    title=t_data["title"],
+                    description=t_data["description"],
+                    assigned_role=t_data["assigned_role"],
+                    priority=t_data["priority"],
+                    status=t_data["status"],
+                    category=t_data["category"],
+                    station_code=t_data.get("station_code"),
+                    assigned_to_name=t_data.get("assigned_to_name"),
+                    due_date=t_data.get("due_date"),
+                    notes=t_data.get("notes"),
+                    created_at=datetime.now(timezone.utc),
+                    updated_at=datetime.now(timezone.utc),
+                )
+                db.add(task)
+
         db.commit()
         return len(stations_to_seed)
     except Exception as e:

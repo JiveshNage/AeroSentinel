@@ -164,3 +164,223 @@ def ingest_batch(db: Session, batch: BatchIngestRequest) -> BatchIngestResponse:
         duplicates_skipped=duplicates_skipped,
         reading_ids=[r.id for r in new_readings],
     )
+
+
+def process_file_upload(
+    db: Session,
+    file_bytes: bytes,
+    filename: str,
+    default_station_code: Optional[str] = None,
+):
+    """
+    Parse uploaded CSV or JSON file containing AWS weather observations,
+    validate against station registry, ingest records, and run the real-time QC engine.
+    """
+    import io
+    import json
+    import csv
+    from datetime import datetime, timezone
+    from storage.models import QCResult, QCVerdict
+    from ingestion.schemas import FileUploadResponse, FileRowPreview
+
+    raw_text = file_bytes.decode("utf-8", errors="replace")
+    rows = []
+
+    # Detect JSON format
+    if filename.lower().endswith(".json") or raw_text.strip().startswith("["):
+        try:
+            parsed_json = json.loads(raw_text)
+            if isinstance(parsed_json, list):
+                rows = parsed_json
+            elif isinstance(parsed_json, dict) and "readings" in parsed_json:
+                rows = parsed_json["readings"]
+        except Exception as e:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid JSON file format: {str(e)}",
+            )
+    else:
+        # Parse CSV
+        try:
+            reader = csv.DictReader(io.StringIO(raw_text))
+            for r in reader:
+                rows.append(r)
+        except Exception as e:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid CSV structure: {str(e)}",
+            )
+
+    if not rows:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Uploaded file contains no data rows or could not be parsed.",
+        )
+
+    # Station cache lookup
+    all_stations = db.query(Station).all()
+    stations_by_code = {s.station_code.upper(): s for s in all_stations}
+    stations_by_id = {str(s.id): s for s in all_stations}
+    default_station = stations_by_code.get(default_station_code.upper()) if default_station_code else None
+
+    def get_val(row_dict, *keys):
+        for k in keys:
+            if k in row_dict and row_dict[k] not in (None, "", "null", "NaN", "nan"):
+                return row_dict[k]
+        return None
+
+    def to_float(val):
+        if val is None:
+            return None
+        try:
+            return float(val)
+        except (ValueError, TypeError):
+            return None
+
+    def parse_time(val):
+        if not val:
+            return datetime.now(timezone.utc)
+        val_str = str(val).strip()
+        # Try ISO parsing
+        try:
+            dt = datetime.fromisoformat(val_str.replace("Z", "+00:00"))
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            return dt
+        except Exception:
+            pass
+        # Common meteorological date formats
+        for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M", "%d-%m-%Y %H:%M:%S", "%d/%m/%Y %H:%M:%S", "%Y/%m/%d %H:%M"):
+            try:
+                dt = datetime.strptime(val_str, fmt)
+                return dt.replace(tzinfo=timezone.utc)
+            except Exception:
+                continue
+        return datetime.now(timezone.utc)
+
+    ingested_count = 0
+    duplicates_skipped = 0
+    anomalies_detected = 0
+    stations_affected_set = set()
+    preview_items: List[FileRowPreview] = []
+
+    for row in rows:
+        # Standardize keys to lowercase
+        norm_row = {str(k).strip().lower(): v for k, v in row.items()}
+
+        st_id_val = get_val(norm_row, "station_code", "station_id", "station", "st_id", "stationcode")
+        st_obj = None
+        if st_id_val:
+            st_clean = str(st_id_val).strip().upper()
+            st_obj = stations_by_code.get(st_clean) or stations_by_id.get(str(st_id_val).strip())
+        if not st_obj:
+            st_obj = default_station or (all_stations[0] if all_stations else None)
+
+        if not st_obj:
+            continue
+
+        stations_affected_set.add(st_obj.station_code)
+
+        time_val = get_val(norm_row, "timestamp", "time", "datetime", "date", "recorded_at")
+        dt = parse_time(time_val)
+
+        temp = to_float(get_val(norm_row, "temperature", "temp", "temp_c", "air_temp"))
+        humidity = to_float(get_val(norm_row, "humidity", "rhum", "rh", "rel_humidity"))
+        if humidity is not None and (humidity < 0.0 or humidity > 100.0):
+            humidity = max(0.0, min(100.0, humidity))
+
+        pressure = to_float(get_val(norm_row, "pressure", "pres", "barometer", "baro", "slp"))
+        wind_speed = to_float(get_val(norm_row, "wind_speed", "wspd", "wind", "speed"))
+        wind_direction = to_float(get_val(norm_row, "wind_direction", "wdir", "direction"))
+        rainfall = to_float(get_val(norm_row, "rainfall", "rain", "prcp", "precipitation"))
+        solar_radiation = to_float(get_val(norm_row, "solar_radiation", "srad", "solar", "radiation"))
+
+        # Check duplicate
+        existing = (
+            db.query(RawReading)
+            .filter(RawReading.station_id == st_obj.id, RawReading.timestamp == dt)
+            .first()
+        )
+        if existing:
+            duplicates_skipped += 1
+            if len(preview_items) < 15:
+                preview_items.append(
+                    FileRowPreview(
+                        station_code=st_obj.station_code,
+                        timestamp=dt.isoformat(),
+                        temperature=temp,
+                        humidity=humidity,
+                        pressure=pressure,
+                        wind_speed=wind_speed,
+                        rainfall=rainfall,
+                        qc_verdict="duplicate_skipped",
+                        fault_type="Already Ingested",
+                    )
+                )
+            continue
+
+        reading = RawReading(
+            station_id=st_obj.id,
+            timestamp=dt,
+            temperature=temp,
+            humidity=humidity,
+            pressure=pressure,
+            wind_speed=wind_speed,
+            wind_direction=wind_direction,
+            rainfall=rainfall,
+            solar_radiation=solar_radiation,
+            ingest_source=f"upload:{filename}",
+        )
+        db.add(reading)
+        db.commit()
+        db.refresh(reading)
+        ingested_count += 1
+
+        # Run QC Engine on reading
+        qc_verdict_str = "valid"
+        fault_type_str = None
+        try:
+            from qc.classifier import run_full_qc_pipeline_for_reading
+            run_full_qc_pipeline_for_reading(db, reading.id)
+
+            # Query resulting QC verdict
+            qc_rows = db.query(QCResult).filter(QCResult.reading_id == reading.id).all()
+            for q in qc_rows:
+                if q.verdict == QCVerdict.anomalous:
+                    qc_verdict_str = "anomalous"
+                    fault_type_str = q.fault_type or q.reason_code
+                    anomalies_detected += 1
+                    break
+                elif q.verdict == QCVerdict.suspect and qc_verdict_str != "anomalous":
+                    qc_verdict_str = "suspect"
+                    fault_type_str = q.fault_type or q.reason_code
+        except Exception:
+            pass
+
+        if len(preview_items) < 15:
+            preview_items.append(
+                FileRowPreview(
+                    station_code=st_obj.station_code,
+                    timestamp=dt.isoformat(),
+                    temperature=temp,
+                    humidity=humidity,
+                    pressure=pressure,
+                    wind_speed=wind_speed,
+                    rainfall=rainfall,
+                    qc_verdict=qc_verdict_str,
+                    fault_type=fault_type_str,
+                )
+            )
+
+    return FileUploadResponse(
+        status="success",
+        filename=filename,
+        total_rows=len(rows),
+        ingested_count=ingested_count,
+        duplicates_skipped=duplicates_skipped,
+        anomalies_detected=anomalies_detected,
+        stations_affected=sorted(list(stations_affected_set)),
+        preview=preview_items,
+        message=f"Successfully processed {len(rows)} rows: {ingested_count} ingested, {duplicates_skipped} duplicates skipped, {anomalies_detected} anomalies detected.",
+    )
+

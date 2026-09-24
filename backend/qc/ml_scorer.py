@@ -207,12 +207,34 @@ def score_reading(
     is_anomalous = bool(raw_decision < bundle.threshold)
     confidence = round(float(min(0.99, max(0.50, 0.50 + abs(raw_decision)))), 2)
 
+    # Compute Explainable AI (XAI) feature attribution (SHAP)
+    shap_attribution: Dict[str, float] = {}
+    try:
+        import shap
+        explainer = shap.TreeExplainer(bundle.model)
+        sv = explainer.shap_values(feat_scaled)
+        if isinstance(sv, list):
+            vals = sv[0][0]
+        elif hasattr(sv, "ndim") and sv.ndim == 2:
+            vals = sv[0]
+        else:
+            vals = sv
+        abs_sum = sum(abs(float(v)) for v in vals) + 1e-6
+        shap_attribution = {name: round(float(vals[i]) / abs_sum, 4) for i, name in enumerate(bundle.feature_names)}
+    except Exception:
+        # Fallback to feature z-score deviation from scaler baseline
+        devs = [abs(float(feat_scaled[0][i])) for i in range(len(bundle.feature_names))]
+        total = sum(devs) + 1e-6
+        shap_attribution = {name: round(devs[i] / total, 4) for i, name in enumerate(bundle.feature_names)}
+
     details = {
         "raw_decision_score": round(raw_decision, 4),
         "calibrated_threshold": round(bundle.threshold, 4),
         "normalized_anomaly_score": round(anomaly_score, 4),
         "model_version": bundle.version,
         "features": {name: round(float(feat_vector[0][i]), 3) for i, name in enumerate(bundle.feature_names)},
+        "shap_attribution": shap_attribution,
+        "primary_driver": max(shap_attribution.items(), key=lambda x: abs(x[1]))[0] if shap_attribution else "value",
     }
 
     return is_anomalous, anomaly_score, confidence, details

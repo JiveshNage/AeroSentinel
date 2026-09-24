@@ -53,11 +53,34 @@ def classify_verdict(
     - confidence: float in [0.0, 1.0]
     - details: combined explanation dictionary
     """
+    # Calculate Corrected / Imputed Value (SIH 26073 Section 4.H - Self-Healing Network)
+    imputed_val = None
+    impute_method = None
+    impute_conf = None
+
+    if spatial_details and "neighbor_mean" in spatial_details and spatial_details.get("neighbor_count", 0) >= 2:
+        imputed_val = round(float(spatial_details["neighbor_mean"]), 2)
+        impute_method = "spatial_kdtree_neighbors"
+        impute_conf = 0.94
+    elif ml_details and "features" in ml_details:
+        feats = ml_details["features"]
+        curr_val = feats.get("value")
+        mean_diff = feats.get("rolling_mean_diff")
+        if curr_val is not None and mean_diff is not None:
+            imputed_val = round(float(curr_val - mean_diff), 2)
+            impute_method = "temporal_rolling_baseline"
+            impute_conf = 0.82
+
     merged_details = {
         "variable": variable,
         "rule": {"verdict": str(rule_verdict) if rule_verdict else None, "reason": rule_reason, "details": rule_details},
         "ml": {"is_anom": ml_is_anom, "score": round(ml_score, 4), "confidence": round(ml_confidence, 2), "details": ml_details},
         "spatial": {"is_anom": spatial_is_anom, "reason": spatial_reason, "details": spatial_details},
+        "imputation": {
+            "corrected_value": imputed_val,
+            "method": impute_method,
+            "confidence": impute_conf,
+        },
     }
 
     # 1. Critical Rule Range Failure (Physical Impossibility)

@@ -239,3 +239,22 @@ class MaintenancePrediction(Base):
 
     # Relationships
     station = relationship("Station", back_populates="predictions")
+
+
+class SystemTask(Base):
+    """Operational, maintenance, and QC tasks partitioned by RBAC role."""
+    __tablename__ = "system_tasks"
+
+    id = Column(UUIDType, primary_key=True, default=uuid.uuid4)
+    title = Column(String(255), nullable=False)
+    description = Column(Text, nullable=False)
+    assigned_role = Column(String(50), nullable=False, index=True)
+    priority = Column(String(50), nullable=False, default="medium")
+    status = Column(String(50), nullable=False, default="pending", index=True)
+    category = Column(String(50), nullable=False, default="general")
+    station_code = Column(String(50), nullable=True, index=True)
+    assigned_to_name = Column(String(255), nullable=True)
+    due_date = Column(String(50), nullable=True)
+    notes = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
+    updated_at = Column(DateTime(timezone=True), nullable=False, default=utc_now, onupdate=utc_now)

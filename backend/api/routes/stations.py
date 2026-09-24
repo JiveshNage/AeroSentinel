@@ -2,7 +2,7 @@
 stations.py — Station Registry & Real-Time Health Status API (F11)
 """
 
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 import enum
 from typing import Any, Dict, List, Optional
 import uuid
@@ -425,3 +425,116 @@ def get_station_telemetry(
         total_points=len(telemetry_points),
         telemetry=telemetry_points,
     )
+
+
+class SimulateTickRequest(BaseModel):
+    force_anomaly: bool = False
+    fault_type: Optional[str] = "spike"
+    variable: Optional[str] = "temperature"
+
+
+@router.post("/{station_id}/simulate-tick", response_model=TelemetryPointSchema)
+def simulate_station_tick(
+    station_id: str,
+    payload: Optional[SimulateTickRequest] = None,
+    db: Session = Depends(get_db),
+):
+    """
+    Generate and ingest an instantaneous real-time telemetry observation tick
+    for live streaming demonstration, optionally injecting an anomaly spike.
+    """
+    import random
+    from qc.classifier import run_full_qc_pipeline_for_reading
+
+    query = db.query(Station)
+    try:
+        val_uuid = uuid.UUID(station_id)
+        st = query.filter(Station.id == val_uuid).first()
+    except ValueError:
+        st = query.filter(Station.station_code == station_id).first()
+
+    if not st:
+        raise HTTPException(status_code=404, detail=f"Station '{station_id}' not found.")
+
+    latest = (
+        db.query(RawReading)
+        .filter(RawReading.station_id == st.id)
+        .order_by(RawReading.timestamp.desc())
+        .first()
+    )
+
+    base_temp = latest.temperature if (latest and latest.temperature is not None) else 32.0
+    base_hum = latest.humidity if (latest and latest.humidity is not None) else 62.0
+    base_pres = latest.pressure if (latest and latest.pressure is not None) else 1012.0
+    base_wind = latest.wind_speed if (latest and latest.wind_speed is not None) else 4.0
+    base_rain = 0.0
+
+    new_temp = round(base_temp + random.uniform(-0.3, 0.3), 2)
+    new_hum = round(max(10.0, min(95.0, base_hum + random.uniform(-1.0, 1.0))), 1)
+    new_pres = round(base_pres + random.uniform(-0.2, 0.2), 1)
+    new_wind = round(max(0.0, base_wind + random.uniform(-0.4, 0.4)), 1)
+    new_solar = round(max(0.0, random.uniform(500, 850)), 1)
+
+    if payload and payload.force_anomaly:
+        var = payload.variable or "temperature"
+        f_type = payload.fault_type or "spike"
+        if var == "temperature":
+            new_temp = 54.8 if f_type == "out_of_bounds" else round(base_temp + 14.5, 2)
+        elif var == "humidity":
+            new_hum = 100.0 if f_type == "flatline" else 99.5
+        elif var == "pressure":
+            new_pres = 830.0 if f_type == "out_of_bounds" else round(base_pres - 25.0, 1)
+        elif var == "wind_speed":
+            new_wind = 48.0
+
+    now_utc = datetime.now(timezone.utc)
+    if latest and latest.timestamp:
+        latest_ts = latest.timestamp.replace(tzinfo=timezone.utc) if latest.timestamp.tzinfo is None else latest.timestamp
+        if latest_ts >= now_utc:
+            now_utc = latest_ts + timedelta(minutes=1)
+
+    reading = RawReading(
+        station_id=st.id,
+        timestamp=now_utc,
+        temperature=new_temp,
+        humidity=new_hum,
+        pressure=new_pres,
+        wind_speed=new_wind,
+        wind_direction=random.randint(0, 360),
+        rainfall=base_rain,
+        solar_radiation=new_solar,
+        ingest_source="live_stream_simulator",
+    )
+    db.add(reading)
+    db.commit()
+    db.refresh(reading)
+
+    try:
+        run_full_qc_pipeline_for_reading(db, reading.id)
+    except Exception:
+        pass
+
+    qc_rows = db.query(QCResult).filter(QCResult.reading_id == reading.id).all()
+    qc_dict = {}
+    for q in qc_rows:
+        qc_dict[q.variable] = QCVariableVerdictSchema(
+            verdict=q.verdict,
+            reason_code=q.reason_code,
+            fault_type=q.fault_type,
+            confidence=q.confidence,
+            details=q.details or {},
+        )
+
+    return TelemetryPointSchema(
+        id=reading.id,
+        timestamp=reading.timestamp,
+        temperature=reading.temperature,
+        humidity=reading.humidity,
+        pressure=reading.pressure,
+        wind_speed=reading.wind_speed,
+        wind_direction=reading.wind_direction,
+        rainfall=reading.rainfall,
+        solar_radiation=reading.solar_radiation,
+        qc_verdicts=qc_dict,
+    )
+

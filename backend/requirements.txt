@@ -16,3 +16,10 @@ matplotlib>=3.8.0
 scikit-learn>=1.4.0
 torch>=2.0.0
 pyjwt>=2.8.0
+python-multipart>=0.0.9
+openmeteo-requests>=1.2.0
+requests-cache>=1.2.0
+retry-requests>=2.0.0
+shap>=0.45.0
+
+
