@@ -155,16 +155,51 @@ def seed_database(db: Session = None) -> int:
                 db.add(station)
                 seeded_count += 1
 
-        # 3. Seed default operator user if not exists
-        default_user = db.query(User).filter(User.email == "operator@imd.gov.in").first()
-        if not default_user:
-            admin_user = User(
-                name="IMD Data Quality Officer",
-                email="operator@imd.gov.in",
-                role=UserRole.data_quality_officer,
-                password_hash="pbkdf2_sha256$placeholder_hash",
-            )
-            db.add(admin_user)
+        # 3. Seed RBAC role accounts for live demonstration
+        from core.auth import hash_password
+        seed_users = [
+            {
+                "email": "admin@imd.gov.in",
+                "name": "Dr. R. Sharma (System Administrator)",
+                "role": UserRole.admin,
+                "password": "AdminPassword123!",
+            },
+            {
+                "email": "operator@imd.gov.in",
+                "name": "A. Verma (Data Quality Officer)",
+                "role": UserRole.data_quality_officer,
+                "password": "OperatorPassword123!",
+            },
+            {
+                "email": "tech@imd.gov.in",
+                "name": "K. Singh (Field Maintenance Technician)",
+                "role": UserRole.field_technician,
+                "password": "TechPassword123!",
+            },
+            {
+                "email": "forecaster@imd.gov.in",
+                "name": "P. Nair (Regional Forecaster)",
+                "role": UserRole.forecaster,
+                "password": "ForecasterPassword123!",
+            },
+        ]
+
+        for u in seed_users:
+            existing_user = db.query(User).filter(User.email == u["email"]).first()
+            if existing_user:
+                existing_user.name = u["name"]
+                existing_user.role = u["role"]
+                existing_user.password_hash = hash_password(u["password"])
+            else:
+                new_user = User(
+                    id=uuid.uuid4(),
+                    name=u["name"],
+                    email=u["email"],
+                    role=u["role"],
+                    password_hash=hash_password(u["password"]),
+                    created_at=datetime.now(timezone.utc),
+                )
+                db.add(new_user)
 
         db.commit()
         return len(stations_to_seed)

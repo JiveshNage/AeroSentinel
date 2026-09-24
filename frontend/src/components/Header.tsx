@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { Map, Server, Activity, ShieldAlert, Wrench } from 'lucide-react';
+import { Map, Server, Activity, ShieldAlert, Wrench, Shield } from 'lucide-react';
+import { DEMO_USERS, getStoredUser, loginWithCredentials, AuthUser } from '../api/auth';
 
 interface HeaderProps {
   systemHealthy: boolean | null;
@@ -20,13 +21,37 @@ export const Header: React.FC<HeaderProps> = ({
     return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
   });
 
+  const [currentUser, setCurrentUser] = useState<AuthUser | null>(() => getStoredUser() || DEMO_USERS.admin);
+  const [switchingRole, setSwitchingRole] = useState<boolean>(false);
+
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
     localStorage.setItem('aerosentinel-theme', theme);
   }, [theme]);
 
+  // Initial silent login to ensure valid token in localStorage
+  useEffect(() => {
+    if (!getStoredUser()) {
+      loginWithCredentials(DEMO_USERS.admin.email, DEMO_USERS.admin.pass).catch(() => {});
+    }
+  }, []);
+
   const toggleTheme = () => {
     setTheme((prev: 'light' | 'dark') => (prev === 'light' ? 'dark' : 'light'));
+  };
+
+  const handleRoleSwitch = async (roleKey: string) => {
+    const target = DEMO_USERS[roleKey];
+    if (!target) return;
+    try {
+      setSwitchingRole(true);
+      const res = await loginWithCredentials(target.email, target.pass);
+      setCurrentUser(res.user);
+    } catch (err) {
+      console.error('Failed to switch role:', err);
+    } finally {
+      setSwitchingRole(false);
+    }
   };
 
   return (
@@ -124,7 +149,25 @@ export const Header: React.FC<HeaderProps> = ({
         </div>
       </div>
 
-      <div className="flex items-center space-x-4">
+      <div className="flex items-center space-x-3">
+        {/* RBAC Role Switcher */}
+        <div className="flex items-center space-x-2 bg-surface border border-line rounded px-2.5 py-1 text-xs">
+          <Shield className="w-3.5 h-3.5 text-accent" />
+          <span className="text-muted font-mono hidden xl:inline">Role:</span>
+          <select
+            value={currentUser ? (Object.keys(DEMO_USERS).find((k) => DEMO_USERS[k].role === currentUser.role) || 'admin') : 'admin'}
+            onChange={(e) => handleRoleSwitch(e.target.value)}
+            disabled={switchingRole}
+            className="bg-transparent text-ink font-semibold focus:outline-none cursor-pointer text-xs"
+            aria-label="Switch RBAC user role"
+          >
+            <option value="admin">Admin (System Governance)</option>
+            <option value="operator">DQO (Quality Control)</option>
+            <option value="tech">Field Tech (Maintenance)</option>
+            <option value="forecaster">Forecaster (Regional Weather)</option>
+          </select>
+        </div>
+
         <button
           onClick={toggleTheme}
           aria-label={`Switch to ${theme === 'light' ? 'dark' : 'light'} mode`}

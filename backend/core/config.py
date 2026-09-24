@@ -12,6 +12,9 @@ class Settings(BaseSettings):
     DATABASE_URL: str = "postgresql+psycopg2://aerosentinel:aerosentinel@localhost:5432/aerosentinel"
     REDIS_URL: str = "redis://localhost:6379/0"
 
+    SECRET_KEY: str = "aerosentinel-secret-jwt-key-sih26073-moes-imd"
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 720
+
     CORS_ORIGINS: Union[str, List[str]] = [
         "http://localhost:3000",
         "http://localhost:5173",
