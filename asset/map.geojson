@@ -1,0 +1,165 @@
+{
+  "type": "FeatureCollection",
+  "metadata": {
+    "name": "AeroSentinel Western & Central Europe Weather Monitoring Zone",
+    "generator": "AeroSentinel OSM Offline Helper",
+    "bounds": {
+      "minlat": 43.04,
+      "minlon": -18.76,
+      "maxlat": 58.63,
+      "maxlon": 18.59
+    }
+  },
+  "features": [
+    {
+      "type": "Feature",
+      "id": "coverage_boundary",
+      "properties": {
+        "name": "OSM Bounding Coverage Zone (asset/map)",
+        "type": "monitoring_boundary",
+        "description": "Western & Central Europe AWS Integration Zone"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              -18.76,
+              43.04
+            ],
+            [
+              18.59,
+              43.04
+            ],
+            [
+              18.59,
+              58.63
+            ],
+            [
+              -18.76,
+              58.63
+            ],
+            [
+              -18.76,
+              43.04
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "EU001",
+      "properties": {
+        "station_code": "EU001",
+        "name": "Berlin (DWD Station)",
+        "state": "Berlin",
+        "country": "Germany",
+        "elevation_m": 34,
+        "amenity": "weather_station"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          13.41,
+          52.52
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "EU002",
+      "properties": {
+        "station_code": "EU002",
+        "name": "London (Heathrow Met Office)",
+        "state": "Greater London",
+        "country": "United Kingdom",
+        "elevation_m": 25,
+        "amenity": "weather_station"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -0.45,
+          51.47
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "EU003",
+      "properties": {
+        "station_code": "EU003",
+        "name": "Paris (Montsouris M\u00e9t\u00e9o-France)",
+        "state": "\u00cele-de-France",
+        "country": "France",
+        "elevation_m": 75,
+        "amenity": "weather_station"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.34,
+          48.82
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "EU004",
+      "properties": {
+        "station_code": "EU004",
+        "name": "Amsterdam (Schiphol KNMI)",
+        "state": "North Holland",
+        "country": "Netherlands",
+        "elevation_m": -3,
+        "amenity": "weather_station"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          4.76,
+          52.31
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "EU005",
+      "properties": {
+        "station_code": "EU005",
+        "name": "Frankfurt Airport AWS",
+        "state": "Hesse",
+        "country": "Germany",
+        "elevation_m": 111,
+        "amenity": "weather_station"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          8.57,
+          50.03
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "EU006",
+      "properties": {
+        "station_code": "EU006",
+        "name": "Dublin Airport Met \u00c9ireann",
+        "state": "Dublin",
+        "country": "Ireland",
+        "elevation_m": 71,
+        "amenity": "weather_station"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -6.24,
+          53.42
+        ]
+      }
+    }
+  ]
+}

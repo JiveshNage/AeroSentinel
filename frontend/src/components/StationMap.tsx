@@ -1,5 +1,6 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import L from 'leaflet';
+import { Layers, Globe } from 'lucide-react';
 import { StationSummary, StationHealthStatus } from '../api/stations';
 
 interface StationMapProps {
@@ -8,6 +9,44 @@ interface StationMapProps {
   onSelectStation?: (station: StationSummary) => void;
   onInspectStation?: (stationId: string) => void;
 }
+
+type BasemapKey = 'carto_voyager' | 'carto_dark' | 'osm' | 'offline';
+
+const BASEMAP_CONFIGS: Record<BasemapKey, { name: string; url: string; subdomains?: string; attribution: string; maxZoom: number }> = {
+  carto_voyager: {
+    name: 'CARTO Voyager',
+    url:
+      import.meta.env.VITE_CARTO_TILE_URL ||
+      'https://basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png?key=cb1_3wto_1_98681061742df32c284b0e0b',
+    attribution: '&copy; <a href="https://carto.com/">CARTO</a> &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+    maxZoom: 19,
+  },
+  carto_dark: {
+    name: 'CARTO Dark',
+    url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+    subdomains: 'abcd',
+    attribution: '&copy; <a href="https://carto.com/">CARTO</a> &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+    maxZoom: 19,
+  },
+  osm: {
+    name: 'OpenStreetMap',
+    url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+    maxZoom: 19,
+  },
+  offline: {
+    name: 'Offline Tiles (Local)',
+    url: '/tiles/{z}/{x}/{y}.png',
+    attribution: 'Local Offline Tile Cache (asset/map)',
+    maxZoom: 8,
+  },
+};
+
+// Bounding box defined in asset/map (minlat=43.04, minlon=-18.76, maxlat=58.63, maxlon=18.59)
+const OSM_BOUNDS: [L.LatLngTuple, L.LatLngTuple] = [
+  [43.04, -18.76],
+  [58.63, 18.59],
+];
 
 const HEALTH_COLORS: Record<StationHealthStatus, { bg: string; border: string; label: string }> = {
   healthy: { bg: '#3FB876', border: '#238636', label: 'HEALTHY' },
@@ -25,6 +64,11 @@ export const StationMap: React.FC<StationMapProps> = ({
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
   const markersLayerRef = useRef<L.LayerGroup | null>(null);
+  const tileLayerRef = useRef<L.TileLayer | null>(null);
+  const osmRegionLayerRef = useRef<L.LayerGroup | null>(null);
+
+  const [activeBasemap, setActiveBasemap] = useState<BasemapKey>('carto_voyager');
+  const [showOsmRegion, setShowOsmRegion] = useState<boolean>(false);
 
   // Initialize Leaflet map instance once
   useEffect(() => {
@@ -38,19 +82,21 @@ export const StationMap: React.FC<StationMapProps> = ({
       attributionControl: true,
     });
 
-    // Basemap tile layer from CARTO Voyager (with API key)
-    const cartoTileUrl =
-      import.meta.env.VITE_CARTO_TILE_URL ||
-      'https://basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png?key=cb1_3wto_1_98681061742df32c284b0e0b';
-
-    L.tileLayer(cartoTileUrl, {
-      maxZoom: 19,
-      attribution:
-        '&copy; <a href="https://carto.com/">CARTO</a> &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+    const conf = BASEMAP_CONFIGS['carto_voyager'];
+    const tileLayer = L.tileLayer(conf.url, {
+      maxZoom: conf.maxZoom,
+      subdomains: conf.subdomains || 'abc',
+      attribution: conf.attribution,
     }).addTo(map);
+
+    tileLayerRef.current = tileLayer;
 
     const markersLayer = L.layerGroup().addTo(map);
     markersLayerRef.current = markersLayer;
+
+    const osmLayer = L.layerGroup().addTo(map);
+    osmRegionLayerRef.current = osmLayer;
+
     mapInstanceRef.current = map;
 
     return () => {
@@ -58,6 +104,73 @@ export const StationMap: React.FC<StationMapProps> = ({
       mapInstanceRef.current = null;
     };
   }, []);
+
+  // Update Tile Layer when user toggles basemap
+  useEffect(() => {
+    const map = mapInstanceRef.current;
+    if (!map) return;
+
+    if (tileLayerRef.current) {
+      map.removeLayer(tileLayerRef.current);
+    }
+
+    const conf = BASEMAP_CONFIGS[activeBasemap];
+    const newLayer = L.tileLayer(conf.url, {
+      maxZoom: conf.maxZoom,
+      subdomains: conf.subdomains || 'abc',
+      attribution: conf.attribution,
+    }).addTo(map);
+
+    tileLayerRef.current = newLayer;
+  }, [activeBasemap]);
+
+  // Toggle OSM Region Bounding Box Overlay
+  useEffect(() => {
+    const map = mapInstanceRef.current;
+    const layer = osmRegionLayerRef.current;
+    if (!map || !layer) return;
+
+    layer.clearLayers();
+
+    if (showOsmRegion) {
+      const rect = L.rectangle(OSM_BOUNDS, {
+        color: '#6366f1',
+        weight: 2,
+        dashArray: '6, 6',
+        fillColor: '#6366f1',
+        fillOpacity: 0.12,
+      });
+
+      rect.bindPopup(`
+        <div style="padding: 8px 10px; font-family: 'IBM Plex Sans', sans-serif; font-size: 12px; color: var(--ink); min-width: 220px;">
+          <div style="font-weight: 600; font-size: 13px; margin-bottom: 4px; color: #4338ca;">
+            📍 OSM Region Boundary (asset/map)
+          </div>
+          <div style="margin-bottom: 6px; color: var(--muted); font-size: 11px;">
+            Western & Central Europe Coverage Zone
+          </div>
+          <div style="background: rgba(99, 102, 241, 0.08); border-radius: 4px; padding: 6px; font-family: 'IBM Plex Mono', monospace; font-size: 10px;">
+            <div>Lat: 43.04°N → 58.63°N</div>
+            <div>Lon: -18.76°W → 18.59°E</div>
+          </div>
+        </div>
+      `);
+
+      layer.addLayer(rect);
+      map.fitBounds(OSM_BOUNDS, { padding: [40, 40], maxZoom: 6 });
+    } else {
+      // Re-fit to stations if available
+      const bounds = L.latLngBounds([]);
+      stations.forEach((st) => {
+        if (typeof st.latitude === 'number' && typeof st.longitude === 'number') {
+          bounds.extend([st.latitude, st.longitude]);
+        }
+      });
+      if (bounds.isValid() && stations.length > 0) {
+        map.fitBounds(bounds, { padding: [40, 40], maxZoom: 8 });
+      }
+    }
+  }, [showOsmRegion, stations]);
 
   // Update station markers when station list changes
   useEffect(() => {
@@ -246,6 +359,43 @@ export const StationMap: React.FC<StationMapProps> = ({
   return (
     <div className="relative w-full h-[520px] rounded border border-line overflow-hidden bg-panel shadow-sm">
       <div ref={mapContainerRef} className="w-full h-full z-0" />
+
+      {/* Top Map Controls Overlay: Basemap Switcher & OSM Region Toggle */}
+      <div className="absolute top-3 right-3 z-[500] flex flex-wrap items-center gap-2">
+        {/* Basemap Switcher */}
+        <div className="bg-panel/95 backdrop-blur-md border border-line rounded px-2 py-1.5 shadow-md flex items-center space-x-1.5 text-xs font-mono">
+          <Layers className="w-3.5 h-3.5 text-accent" />
+          <span className="text-[10px] text-muted uppercase tracking-wider mr-1">Basemap:</span>
+          {(['carto_voyager', 'carto_dark', 'osm', 'offline'] as BasemapKey[]).map((key) => (
+            <button
+              key={key}
+              onClick={() => setActiveBasemap(key)}
+              className={`px-2 py-0.5 rounded text-[11px] font-sans font-medium transition-all ${
+                activeBasemap === key
+                  ? 'bg-accent text-white shadow-xs'
+                  : 'text-muted hover:text-ink hover:bg-hover'
+              }`}
+              title={BASEMAP_CONFIGS[key].name}
+            >
+              {key === 'carto_voyager' ? 'Voyager' : key === 'carto_dark' ? 'Dark' : key === 'osm' ? 'OSM' : 'Offline'}
+            </button>
+          ))}
+        </div>
+
+        {/* OSM Region Toggle (asset/map) */}
+        <button
+          onClick={() => setShowOsmRegion(!showOsmRegion)}
+          className={`flex items-center space-x-1 px-2.5 py-1.5 rounded text-xs font-mono border shadow-md backdrop-blur-md transition-all ${
+            showOsmRegion
+              ? 'bg-indigo-600/90 text-white border-indigo-400 font-semibold ring-1 ring-indigo-400'
+              : 'bg-panel/95 text-ink border-line hover:bg-hover hover:border-muted'
+          }`}
+          title="Toggle OpenStreetMap Bounding Box defined in asset/map"
+        >
+          <Globe className="w-3.5 h-3.5" />
+          <span>{showOsmRegion ? 'OSM Region Active' : 'OSM Region (asset/map)'}</span>
+        </button>
+      </div>
       
       {/* Map Legend Overlay */}
       <div className="absolute bottom-4 right-4 z-[500] bg-panel/90 backdrop-blur-sm border border-line px-3 py-2 rounded text-[0.6875rem] font-mono shadow-lg flex items-center space-x-3 pointer-events-none">
