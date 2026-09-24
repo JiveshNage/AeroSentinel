@@ -70,9 +70,11 @@ class FeedbackLabel(str, enum.Enum):
 
 class UserRole(str, enum.Enum):
     admin = "admin"
-    data_quality_officer = "data_quality_officer"
     forecaster = "forecaster"
+    qc_analyst = "qc_analyst"
+    data_quality_officer = "data_quality_officer"
     field_technician = "field_technician"
+    viewer = "viewer"
 
 
 class Station(Base):
@@ -258,3 +260,73 @@ class SystemTask(Base):
     notes = Column(Text, nullable=True)
     created_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
     updated_at = Column(DateTime(timezone=True), nullable=False, default=utc_now, onupdate=utc_now)
+
+
+class Role(Base):
+    """System RBAC Role definition."""
+    __tablename__ = "roles"
+
+    id = Column(UUIDType, primary_key=True, default=uuid.uuid4)
+    name = Column(String(50), unique=True, nullable=False, index=True)
+    display_name = Column(String(100), nullable=False)
+    description = Column(Text, nullable=True)
+    is_system = Column(Boolean, nullable=False, default=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
+
+    permissions = relationship("RolePermission", back_populates="role", cascade="all, delete-orphan")
+
+
+class Permission(Base):
+    """Granular operational permission code."""
+    __tablename__ = "permissions"
+
+    id = Column(UUIDType, primary_key=True, default=uuid.uuid4)
+    code = Column(String(100), unique=True, nullable=False, index=True)
+    module = Column(String(50), nullable=False, index=True)
+    description = Column(Text, nullable=False)
+    created_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
+
+    roles = relationship("RolePermission", back_populates="permission", cascade="all, delete-orphan")
+
+
+class RolePermission(Base):
+    """Many-to-many relationship mapping Roles to Permissions."""
+    __tablename__ = "role_permissions"
+
+    id = Column(BigIntPK, primary_key=True, autoincrement=True)
+    role_id = Column(UUIDType, ForeignKey("roles.id", ondelete="CASCADE"), nullable=False, index=True)
+    permission_id = Column(UUIDType, ForeignKey("permissions.id", ondelete="CASCADE"), nullable=False, index=True)
+
+    role = relationship("Role", back_populates="permissions")
+    permission = relationship("Permission", back_populates="roles")
+
+    __table_args__ = (
+        UniqueConstraint("role_id", "permission_id", name="uq_role_permission"),
+    )
+
+
+class AuditLog(Base):
+    """Security, administrative, and data access audit trail."""
+    __tablename__ = "audit_logs"
+
+    id = Column(BigIntPK, primary_key=True, autoincrement=True)
+    user_id = Column(UUIDType, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+    user_email = Column(String(255), nullable=False, index=True)
+    action = Column(String(100), nullable=False, index=True)
+    resource = Column(String(100), nullable=False)
+    details = Column(JSONType, nullable=False, default=dict)
+    ip_address = Column(String(50), nullable=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, default=utc_now, index=True)
+
+
+class SystemSetting(Base):
+    """Dynamic operational configuration and ML pipeline hyperparameters."""
+    __tablename__ = "system_settings"
+
+    id = Column(BigIntPK, primary_key=True, autoincrement=True)
+    key = Column(String(100), unique=True, nullable=False, index=True)
+    value = Column(JSONType, nullable=False, default=dict)
+    description = Column(Text, nullable=True)
+    updated_by = Column(String(255), nullable=True)
+    updated_at = Column(DateTime(timezone=True), nullable=False, default=utc_now, onupdate=utc_now)
+

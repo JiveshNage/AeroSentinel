@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { Header, AppTab } from './components/Header';
+import { Header } from './components/Header';
+import { Sidebar, AppNavTab } from './components/Sidebar';
 import { HealthCard } from './components/HealthCard';
 import { MapView } from './pages/MapView';
 import { StationDetailView } from './pages/StationDetailView';
@@ -8,20 +9,62 @@ import { MaintenanceView } from './pages/MaintenanceView';
 import { TasksView } from './pages/TasksView';
 import { FileUploadView } from './pages/FileUploadView';
 import { LiveChartView } from './pages/LiveChartView';
+import { DashboardView } from './pages/DashboardView';
+import { AdminUsersView } from './pages/AdminUsersView';
+import { AdminRolesView } from './pages/AdminRolesView';
+import { AdminAuditView } from './pages/AdminAuditView';
+import { AdminSettingsView } from './pages/AdminSettingsView';
 import { fetchHealth, HealthResponse } from './api/client';
 import { fetchAlerts } from './api/alerts';
 import { fetchTasks } from './api/tasks';
-import { DEMO_USERS, getStoredUser, AuthUser } from './api/auth';
+import { DEMO_USERS, getStoredUser, AuthUser, hasPermission, PermissionCode } from './api/auth';
+
+const TAB_PERMISSION_MAP: Partial<Record<AppNavTab, PermissionCode>> = {
+  dashboard: 'dashboard.view',
+  map: 'fleet.view',
+  live: 'telemetry.view',
+  stations: 'stations.view',
+  alerts: 'alerts.view',
+  health: 'health.view',
+  tasks: 'fleet.view',
+  upload: 'data.upload',
+  maintenance: 'maintenance.view',
+  admin_users: 'users.view',
+  admin_roles: 'roles.manage',
+  admin_audit: 'audit.view',
+  admin_settings: 'system.manage',
+};
 
 export const App: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<AppTab>('map');
+  const [currentUser, setCurrentUser] = useState<AuthUser | null>(() => getStoredUser() || DEMO_USERS.admin);
+  const [activeTab, setActiveTab] = useState<AppNavTab>(() => {
+    return currentUser?.role === 'field_technician' ? 'map' : 'dashboard';
+  });
   const [selectedStationCode, setSelectedStationCode] = useState<string>('NCR001');
   const [healthData, setHealthData] = useState<HealthResponse | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [activeAlertsCount, setActiveAlertsCount] = useState<number>(0);
   const [pendingTasksCount, setPendingTasksCount] = useState<number>(0);
-  const [currentUser, setCurrentUser] = useState<AuthUser | null>(() => getStoredUser() || DEMO_USERS.admin);
+
+  // Sidebar collapsible state
+  const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(false);
+  const [sidebarMobileOpen, setSidebarMobileOpen] = useState<boolean>(false);
+
+  // Enforce frontend route guard when role or active tab changes
+  useEffect(() => {
+    if (!currentUser) return;
+    const requiredPerm = TAB_PERMISSION_MAP[activeTab];
+    if (requiredPerm && !hasPermission(currentUser, requiredPerm)) {
+      if (hasPermission(currentUser, 'dashboard.view')) {
+        setActiveTab('dashboard');
+      } else if (hasPermission(currentUser, 'fleet.view')) {
+        setActiveTab('map');
+      } else if (hasPermission(currentUser, 'stations.view')) {
+        setActiveTab('stations');
+      }
+    }
+  }, [currentUser, activeTab]);
 
   const checkHealth = useCallback(async () => {
     setLoading(true);
@@ -42,14 +85,14 @@ export const App: React.FC = () => {
     try {
       const alertRes = await fetchAlerts({ status: 'open', limit: 1 });
       setActiveAlertsCount(alertRes.total);
-    } catch (e) {
+    } catch {
       // Ignore
     }
 
     try {
       const taskRes = await fetchTasks({ status: 'pending' });
       setPendingTasksCount(taskRes.total);
-    } catch (e) {
+    } catch {
       // Ignore
     }
   }, []);
@@ -67,172 +110,137 @@ export const App: React.FC = () => {
   const isHealthy = healthData?.status === 'healthy';
 
   return (
-    <div className="min-h-screen bg-surface flex flex-col font-sans">
+    <div className="min-h-screen bg-surface flex flex-col font-sans text-ink">
+      {/* Top Header */}
       <Header
         systemHealthy={error ? false : loading && !healthData ? null : isHealthy}
-        activeTab={activeTab}
-        onTabChange={setActiveTab}
+        onNavigateTab={setActiveTab}
+        onToggleSidebarMobile={() => setSidebarMobileOpen(!sidebarMobileOpen)}
         activeAlertsCount={activeAlertsCount}
-        pendingTasksCount={pendingTasksCount}
         currentUser={currentUser}
-        onUserChange={setCurrentUser}
+        onUserChange={(newUser) => {
+          setCurrentUser(newUser);
+          // Auto route if field tech or viewer
+          if (newUser.role === 'field_technician') {
+            setActiveTab('map');
+          } else {
+            setActiveTab('dashboard');
+          }
+        }}
       />
 
-      <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 space-y-6">
-        {activeTab === 'map' ? (
-          <MapView
-            onInspectStation={(code) => {
-              setSelectedStationCode(code);
-              setActiveTab('detail');
-            }}
-          />
-        ) : activeTab === 'detail' ? (
-          <StationDetailView
-            initialStationCode={selectedStationCode}
-            onBackToMap={() => setActiveTab('map')}
-          />
-        ) : activeTab === 'live' ? (
-          <LiveChartView
-            initialStationCode={selectedStationCode}
-            onInspectStation={(code) => {
-              setSelectedStationCode(code);
-              setActiveTab('detail');
-            }}
-          />
-        ) : activeTab === 'alerts' ? (
-          <AlertsFeedView
-            onInspectStation={(code) => {
-              setSelectedStationCode(code);
-              setActiveTab('detail');
-            }}
-          />
-        ) : activeTab === 'tasks' ? (
-          <TasksView
-            currentUser={currentUser}
-            onInspectStation={(code) => {
-              setSelectedStationCode(code);
-              setActiveTab('detail');
-            }}
-          />
-        ) : activeTab === 'upload' ? (
-          <FileUploadView
-            currentUser={currentUser}
-            onInspectStation={(code) => {
-              setSelectedStationCode(code);
-              setActiveTab('detail');
-            }}
-          />
-        ) : activeTab === 'maintenance' ? (
-          <MaintenanceView
-            onInspectStation={(code) => {
-              setSelectedStationCode(code);
-              setActiveTab('detail');
-            }}
-          />
-        ) : (
-          <div className="space-y-6">
-            {/* Intro banner */}
-            <div className="bg-panel border border-line rounded-lg p-5">
-              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                <div className="flex items-start space-x-4">
-                  <img
-                    src="/logo.png"
-                    alt="AeroSentinel Logo"
-                    className="h-12 w-auto object-contain rounded-lg p-1 bg-surface border border-line hidden sm:block shadow-xs"
-                  />
-                  <div>
-                    <div className="flex items-center space-x-2">
-                      <span className="text-[0.75rem] font-mono uppercase tracking-wider text-accent font-semibold">
-                        System Architecture & Status
-                      </span>
-                      <span className="text-line">•</span>
-                      <span className="text-[0.75rem] font-mono text-muted">Feature F1-F16 Complete</span>
-                    </div>
-                    <h2 className="text-[1.25rem] font-semibold text-ink mt-1 font-sans">
-                      AeroSentinel — AI/ML Weather Station Quality Control
-                    </h2>
-                    <p className="text-[0.875rem] text-muted mt-1 max-w-3xl font-sans">
-                      Integrated FastAPI ingestion, TimescaleDB sensor hypertable, rule engine
-                      (range/step/persistence), IsolationForest anomaly scorer, 3D KDTree spatial consistency,
-                      RBAC task workflow board, and live telemetry streaming.
-                    </p>
-                  </div>
-                </div>
-                <div className="flex items-center space-x-3 text-[0.8125rem] font-mono">
-                  <span className="px-2.5 py-1 rounded bg-surface border border-line text-ink">
-                    FastAPI: :8000
-                  </span>
-                  <span className="px-2.5 py-1 rounded bg-surface border border-line text-ink">
-                    Vite: :5173
-                  </span>
-                </div>
-              </div>
-            </div>
+      {/* Main Body with Sidebar + Workspace Layout */}
+      <div className="flex-1 flex overflow-hidden">
+        {/* Collapsible Left Sidebar */}
+        <Sidebar
+          activeTab={activeTab}
+          onTabChange={setActiveTab}
+          collapsed={sidebarCollapsed}
+          onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
+          mobileOpen={sidebarMobileOpen}
+          onMobileClose={() => setSidebarMobileOpen(false)}
+          currentUser={currentUser}
+          activeAlertsCount={activeAlertsCount}
+          pendingTasksCount={pendingTasksCount}
+        />
 
-            {/* Health status component */}
-            <HealthCard
-              data={healthData}
-              loading={loading}
-              error={error}
-              onRefresh={checkHealth}
+        {/* Primary Main Content View Area */}
+        <main className="flex-1 overflow-y-auto p-4 sm:p-6 max-w-7xl w-full mx-auto space-y-6">
+          {activeTab === 'dashboard' ? (
+            <DashboardView
+              currentUser={currentUser}
+              onNavigateTab={setActiveTab}
+              onInspectStation={(code) => {
+                setSelectedStationCode(code);
+                setActiveTab('detail');
+              }}
             />
-
-            {/* Architecture Modules Grid */}
-            <div className="bg-panel border border-line rounded-lg p-6">
-              <h3 className="text-[1.125rem] font-semibold text-ink font-sans mb-1">
-                System Module Boundaries & RBAC Infrastructure
-              </h3>
-              <p className="text-[0.8125rem] text-muted font-sans mb-4">
-                Decoupled layers adhering strictly to architecture.md.
-              </p>
-
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="p-4 border border-line rounded-lg bg-surface">
-                  <span className="text-[0.75rem] font-mono text-accent font-semibold block">01 / INGESTION & DATA</span>
-                  <h4 className="text-[0.9375rem] font-medium text-ink mt-1">Telemetry Ingestion & File Upload</h4>
-                  <p className="text-[0.8125rem] text-muted mt-1 font-sans">
-                    REST, simulator stream receiver & CSV/JSON file upload gateway with auto-station resolution.
-                  </p>
-                  <span className="inline-block mt-3 text-[0.6875rem] font-mono text-muted border border-line px-1.5 py-0.5 rounded">
-                    backend/ingestion
-                  </span>
-                </div>
-
-                <div className="p-4 border border-line rounded-lg bg-surface">
-                  <span className="text-[0.75rem] font-mono text-accent font-semibold block">02 / QC ENGINE</span>
-                  <h4 className="text-[0.9375rem] font-medium text-ink mt-1">Multi-Layer QC Pipeline</h4>
-                  <p className="text-[0.8125rem] text-muted mt-1 font-sans">
-                    Rule engine (range/step/flatline), ML anomaly scoring (IsolationForest), and 3D KDTree spatial check.
-                  </p>
-                  <span className="inline-block mt-3 text-[0.6875rem] font-mono text-muted border border-line px-1.5 py-0.5 rounded">
-                    backend/qc
-                  </span>
-                </div>
-
-                <div className="p-4 border border-line rounded-lg bg-surface">
-                  <span className="text-[0.75rem] font-mono text-accent font-semibold block">03 / RBAC & LIVE OPS</span>
-                  <h4 className="text-[0.9375rem] font-medium text-ink mt-1">Role Workflows & Live Streaming</h4>
-                  <p className="text-[0.8125rem] text-muted mt-1 font-sans">
-                    Role-based operational task division, real-time waveform streaming, and predictive maintenance dispatch.
-                  </p>
-                  <span className="inline-block mt-3 text-[0.6875rem] font-mono text-muted border border-line px-1.5 py-0.5 rounded">
-                    backend/tasks & live
-                  </span>
-                </div>
-              </div>
+          ) : activeTab === 'map' || activeTab === 'stations' ? (
+            <MapView
+              onInspectStation={(code) => {
+                setSelectedStationCode(code);
+                setActiveTab('detail');
+              }}
+            />
+          ) : activeTab === 'detail' ? (
+            <StationDetailView
+              initialStationCode={selectedStationCode}
+              onBackToMap={() => setActiveTab('map')}
+            />
+          ) : activeTab === 'live' ? (
+            <LiveChartView
+              initialStationCode={selectedStationCode}
+              onInspectStation={(code) => {
+                setSelectedStationCode(code);
+                setActiveTab('detail');
+              }}
+            />
+          ) : activeTab === 'alerts' ? (
+            <AlertsFeedView
+              onInspectStation={(code) => {
+                setSelectedStationCode(code);
+                setActiveTab('detail');
+              }}
+            />
+          ) : activeTab === 'health' ? (
+            <div className="space-y-6">
+              <HealthCard
+                data={healthData}
+                loading={loading}
+                error={error}
+                onRefresh={checkHealth}
+              />
             </div>
-          </div>
-        )}
-      </main>
+          ) : activeTab === 'tasks' ? (
+            <TasksView
+              currentUser={currentUser}
+              onInspectStation={(code) => {
+                setSelectedStationCode(code);
+                setActiveTab('detail');
+              }}
+            />
+          ) : activeTab === 'upload' ? (
+            <FileUploadView
+              currentUser={currentUser}
+              onInspectStation={(code) => {
+                setSelectedStationCode(code);
+                setActiveTab('detail');
+              }}
+            />
+          ) : activeTab === 'maintenance' ? (
+            <MaintenanceView
+              onInspectStation={(code) => {
+                setSelectedStationCode(code);
+                setActiveTab('detail');
+              }}
+            />
+          ) : activeTab === 'admin_users' ? (
+            <AdminUsersView />
+          ) : activeTab === 'admin_roles' ? (
+            <AdminRolesView />
+          ) : activeTab === 'admin_audit' ? (
+            <AdminAuditView />
+          ) : activeTab === 'admin_settings' ? (
+            <AdminSettingsView />
+          ) : (
+            <div className="p-8 text-center text-muted font-mono">
+              View not found. Select a module from the sidebar.
+            </div>
+          )}
+        </main>
+      </div>
 
-      <footer className="w-full border-t border-line py-4 px-6 flex flex-col sm:flex-row items-center justify-between gap-3 text-[0.75rem] font-mono text-muted bg-panel">
+      {/* Global Compact Operations Footer */}
+      <footer className="w-full border-t border-line py-3 px-6 flex flex-col sm:flex-row items-center justify-between gap-2 text-[11px] font-mono text-muted bg-panel shrink-0 select-none">
         <div className="flex items-center space-x-2">
-          <img src="/logo.png" alt="AeroSentinel" className="h-5 w-auto object-contain rounded" />
+          <img src="/logo.png" alt="AeroSentinel" className="h-4 w-auto object-contain rounded" />
           <span className="font-semibold text-ink">AeroSentinel</span>
-          <span>· MoES / IMD Disaster Management (SIH26073)</span>
+          <span>· Automated Weather Station AI Quality Control (SIH26073)</span>
         </div>
-        <div className="flex items-center space-x-3 text-[0.6875rem]">
-          <span>Role Clearance: <strong className="text-ink">{currentUser?.role || 'admin'}</strong></span>
+        <div className="flex items-center space-x-3 text-[10px]">
+          <span>Role Clearance: <strong className="text-accent uppercase">{currentUser?.role || 'admin'}</strong></span>
+          <span>•</span>
+          <span>Permissions Active: <strong className="text-ink">{currentUser?.permissions?.length || 21} / 21</strong></span>
           <span>•</span>
           <span>FastAPI + TimescaleDB + IsolationForest</span>
         </div>

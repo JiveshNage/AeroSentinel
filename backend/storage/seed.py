@@ -155,14 +155,87 @@ def seed_database(db: Session = None) -> int:
                 db.add(station)
                 seeded_count += 1
 
-        # 3. Seed RBAC role accounts for live demonstration
+        # 3. Seed RBAC roles, permissions, and accounts
         from core.auth import hash_password
+        from core.permissions import ALL_PERMISSIONS, ROLE_PERMISSIONS_MAP
+        from storage.models import Role, Permission, RolePermission, AuditLog, SystemSetting
+
+        # A. Seed Permissions
+        perm_objs = {}
+        for code, (module_name, desc_text) in ALL_PERMISSIONS.items():
+            existing_p = db.query(Permission).filter(Permission.code == code).first()
+            if not existing_p:
+                p = Permission(
+                    id=uuid.uuid4(),
+                    code=code,
+                    module=module_name,
+                    description=desc_text,
+                    created_at=datetime.now(timezone.utc),
+                )
+                db.add(p)
+                perm_objs[code] = p
+            else:
+                perm_objs[code] = existing_p
+        db.flush()
+
+        # B. Seed Roles & Mappings
+        role_definitions = [
+            ("admin", "System Administrator", "Full uninhibited access to all application domains, governance, and ML models."),
+            ("forecaster", "Operational Forecaster", "Meteorological analysis, severe weather warnings, anomalies, and active alerts."),
+            ("qc_analyst", "Quality Control Analyst", "Sensor validation, anomaly adjudication, data upload, and QC false-alarm tuning."),
+            ("data_quality_officer", "Data Quality Officer", "Legacy alias for QC Analyst."),
+            ("field_technician", "Field Maintenance Technician", "Station sensor hardware status, preventative maintenance work orders, and field telemetry."),
+            ("viewer", "Read-Only Observer", "Public / stakeholder read-only view of current station status, maps, and telemetry."),
+        ]
+
+        for r_name, d_name, r_desc in role_definitions:
+            existing_r = db.query(Role).filter(Role.name == r_name).first()
+            if not existing_r:
+                r_obj = Role(
+                    id=uuid.uuid4(),
+                    name=r_name,
+                    display_name=d_name,
+                    description=r_desc,
+                    is_system=True,
+                    created_at=datetime.now(timezone.utc),
+                )
+                db.add(r_obj)
+                db.flush()
+            else:
+                r_obj = existing_r
+
+            # Map permissions
+            assigned_codes = ROLE_PERMISSIONS_MAP.get(r_name, [])
+            for c in assigned_codes:
+                p_item = perm_objs.get(c) or db.query(Permission).filter(Permission.code == c).first()
+                if p_item:
+                    existing_rp = db.query(RolePermission).filter(
+                        RolePermission.role_id == r_obj.id,
+                        RolePermission.permission_id == p_item.id,
+                    ).first()
+                    if not existing_rp:
+                        db.add(RolePermission(role_id=r_obj.id, permission_id=p_item.id))
+        db.flush()
+
+        # C. Seed User Accounts for all 5 roles
         seed_users = [
             {
                 "email": "admin@imd.gov.in",
                 "name": "Dr. R. Sharma (System Administrator)",
                 "role": UserRole.admin,
                 "password": "AdminPassword123!",
+            },
+            {
+                "email": "forecaster@imd.gov.in",
+                "name": "P. Nair (Operational Forecaster)",
+                "role": UserRole.forecaster,
+                "password": "ForecasterPassword123!",
+            },
+            {
+                "email": "qc@imd.gov.in",
+                "name": "A. Verma (Quality Control Analyst)",
+                "role": UserRole.qc_analyst,
+                "password": "QcPassword123!",
             },
             {
                 "email": "operator@imd.gov.in",
@@ -177,10 +250,10 @@ def seed_database(db: Session = None) -> int:
                 "password": "TechPassword123!",
             },
             {
-                "email": "forecaster@imd.gov.in",
-                "name": "P. Nair (Regional Forecaster)",
-                "role": UserRole.forecaster,
-                "password": "ForecasterPassword123!",
+                "email": "viewer@imd.gov.in",
+                "name": "S. Das (Read-Only Observer)",
+                "role": UserRole.viewer,
+                "password": "ViewerPassword123!",
             },
         ]
 
@@ -200,6 +273,45 @@ def seed_database(db: Session = None) -> int:
                     created_at=datetime.now(timezone.utc),
                 )
                 db.add(new_user)
+        db.flush()
+
+        # D. Seed Initial Audit Logs
+        if db.query(AuditLog).count() == 0:
+            initial_logs = [
+                ("admin@imd.gov.in", "system_boot", "kernel", {"status": "initialized", "version": "v2.4-PROD"}),
+                ("admin@imd.gov.in", "rbac_synced", "permissions", {"total_permissions": len(ALL_PERMISSIONS)}),
+                ("qc@imd.gov.in", "login", "auth", {"method": "bearer_jwt", "client": "operations_console"}),
+                ("forecaster@imd.gov.in", "view_fleet", "fleet_map", {"cluster": "NCR_REGIONAL"}),
+                ("tech@imd.gov.in", "inspect_station", "NCR007", {"status": "maintenance_scheduled"}),
+            ]
+            for email, act, res, det in initial_logs:
+                db.add(AuditLog(
+                    user_email=email,
+                    action=act,
+                    resource=res,
+                    details=det,
+                    ip_address="127.0.0.1",
+                    created_at=datetime.now(timezone.utc),
+                ))
+
+        # E. Seed Default System Settings
+        if db.query(SystemSetting).count() == 0:
+            default_settings = [
+                ("pipeline.isolation_forest.contamination", {"value": 0.05, "type": "float"}, "Contamination fraction parameter for unsupervised anomaly scoring"),
+                ("pipeline.kdtree.neighbor_k", {"value": 5, "type": "int"}, "Number of nearest spatial neighbor AWS stations queried for consistency validation"),
+                ("pipeline.retrain.auto_retrain_days", {"value": 7, "type": "int"}, "Automated background model retraining cycle interval"),
+                ("notifications.critical_alert_sound", {"value": True, "type": "bool"}, "Play auditory alert in operations room for critical faults"),
+                ("ingestion.rate_limit_per_min", {"value": 600, "type": "int"}, "Max HTTP ingestion telemetry requests accepted per AWS station node"),
+            ]
+            for k, v, d in default_settings:
+                db.add(SystemSetting(
+                    key=k,
+                    value=v,
+                    description=d,
+                    updated_by="system",
+                    updated_at=datetime.now(timezone.utc),
+                ))
+        db.commit()
 
         # 4. Seed operational tasks partitioned by RBAC role
         from storage.models import SystemTask

@@ -19,6 +19,7 @@ class UserResponse(BaseModel):
     name: str
     email: str
     role: str
+    permissions: list[str] = Field(default_factory=list)
     created_at: datetime
 
     model_config = {"from_attributes": True}

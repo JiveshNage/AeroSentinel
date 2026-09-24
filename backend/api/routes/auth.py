@@ -22,6 +22,7 @@ from core.auth import (
     get_current_user,
     require_roles,
 )
+from core.permissions import get_user_permissions
 from api.schemas.auth import (
     LoginRequest,
     TokenResponse,
@@ -58,6 +59,7 @@ def login(
 
     token = create_access_token(user)
     role_str = user.role.value if hasattr(user.role, "value") else str(user.role)
+    perms = get_user_permissions(user)
 
     return TokenResponse(
         access_token=token,
@@ -67,6 +69,7 @@ def login(
             name=user.name,
             email=user.email,
             role=role_str,
+            permissions=perms,
             created_at=user.created_at,
         ),
     )
@@ -81,11 +84,13 @@ def get_authenticated_user_profile(
     Requires valid Bearer token.
     """
     role_str = current_user.role.value if hasattr(current_user.role, "value") else str(current_user.role)
+    perms = get_user_permissions(current_user)
     return UserResponse(
         id=str(current_user.id),
         name=current_user.name,
         email=current_user.email,
         role=role_str,
+        permissions=perms,
         created_at=current_user.created_at,
     )
 

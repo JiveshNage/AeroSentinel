@@ -74,12 +74,16 @@ def create_access_token(user: User, expires_delta: Optional[timedelta] = None) -
     else:
         expire = now + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
 
+    from core.permissions import get_user_permissions
+
     role_val = user.role.value if hasattr(user.role, "value") else str(user.role)
+    permissions = get_user_permissions(user)
     payload = {
         "sub": str(user.id),
         "email": user.email,
         "name": user.name,
         "role": role_val,
+        "permissions": permissions,
         "iat": int(now.timestamp()),
         "exp": int(expire.timestamp()),
     }

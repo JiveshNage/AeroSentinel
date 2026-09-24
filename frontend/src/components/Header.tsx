@@ -1,43 +1,30 @@
 import React, { useEffect, useState } from 'react';
 import {
-  Map,
-  Server,
-  Activity,
-  ShieldAlert,
-  Wrench,
+  Menu,
+  Bell,
+  Sun,
+  Moon,
   Shield,
-  Radio,
-  CheckSquare,
-  UploadCloud,
+  Activity,
+  ChevronDown,
 } from 'lucide-react';
 import { DEMO_USERS, getStoredUser, loginWithCredentials, AuthUser } from '../api/auth';
-
-export type AppTab =
-  | 'map'
-  | 'detail'
-  | 'live'
-  | 'alerts'
-  | 'tasks'
-  | 'upload'
-  | 'maintenance'
-  | 'system';
+import { AppNavTab } from './Sidebar';
 
 interface HeaderProps {
   systemHealthy: boolean | null;
-  activeTab: AppTab;
-  onTabChange: (tab: AppTab) => void;
+  onNavigateTab: (tab: AppNavTab) => void;
+  onToggleSidebarMobile: () => void;
   activeAlertsCount?: number;
-  pendingTasksCount?: number;
   currentUser: AuthUser | null;
   onUserChange: (user: AuthUser) => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
   systemHealthy,
-  activeTab,
-  onTabChange,
-  activeAlertsCount,
-  pendingTasksCount,
+  onNavigateTab,
+  onToggleSidebarMobile,
+  activeAlertsCount = 0,
   currentUser,
   onUserChange,
 }) => {
@@ -47,6 +34,7 @@ export const Header: React.FC<HeaderProps> = ({
     return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
   });
 
+  const [roleMenuOpen, setRoleMenuOpen] = useState<boolean>(false);
   const [switchingRole, setSwitchingRole] = useState<boolean>(false);
 
   useEffect(() => {
@@ -74,6 +62,7 @@ export const Header: React.FC<HeaderProps> = ({
       setSwitchingRole(true);
       const res = await loginWithCredentials(target.email, target.pass);
       onUserChange(res.user);
+      setRoleMenuOpen(false);
     } catch (err) {
       console.error('Failed to switch role:', err);
     } finally {
@@ -81,192 +70,180 @@ export const Header: React.FC<HeaderProps> = ({
     }
   };
 
-  const currentRoleKey = currentUser
-    ? Object.keys(DEMO_USERS).find((k) => DEMO_USERS[k].role === currentUser.role) || 'admin'
-    : 'admin';
+  const getRoleBadgeColor = (role?: string) => {
+    switch (role) {
+      case 'admin':
+        return 'bg-purple-500/15 text-purple-400 border-purple-500/30';
+      case 'forecaster':
+        return 'bg-sky-500/15 text-sky-400 border-sky-500/30';
+      case 'qc_analyst':
+      case 'data_quality_officer':
+        return 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30';
+      case 'field_technician':
+        return 'bg-amber-500/15 text-amber-400 border-amber-500/30';
+      case 'viewer':
+      default:
+        return 'bg-slate-500/15 text-slate-400 border-slate-500/30';
+    }
+  };
 
   return (
-    <header className="w-full bg-panel border-b border-line px-4 sm:px-6 py-2.5 flex items-center justify-between sticky top-0 z-40 backdrop-blur-md bg-opacity-95 shadow-sm">
-      <div className="flex items-center space-x-4 lg:space-x-6">
-        {/* Brand with asset/Logo.png */}
+    <header className="h-14 w-full bg-panel border-b border-line px-3 sm:px-5 flex items-center justify-between sticky top-0 z-40 backdrop-blur-md bg-opacity-95 shadow-xs select-none">
+      {/* Left: Mobile Toggle & Brand Details */}
+      <div className="flex items-center space-x-3">
+        {/* Mobile menu button */}
+        <button
+          onClick={onToggleSidebarMobile}
+          className="md:hidden p-2 rounded text-muted hover:text-ink hover:bg-hover transition-colors"
+          aria-label="Toggle Navigation Drawer"
+        >
+          <Menu className="w-5 h-5" />
+        </button>
+
+        {/* Logo and Version Badge */}
         <div
-          onClick={() => onTabChange('map')}
-          className="flex items-center space-x-3 cursor-pointer group"
+          onClick={() => onNavigateTab('dashboard')}
+          className="flex items-center space-x-2.5 cursor-pointer group"
         >
           <img
             src="/logo.png"
             alt="AeroSentinel Logo"
-            className="h-9 w-auto max-w-[42px] object-contain rounded drop-shadow-sm group-hover:scale-105 transition-transform"
+            className="h-8 w-auto object-contain rounded group-hover:scale-105 transition-transform"
           />
-          <div>
-            <div className="flex items-center space-x-2">
-              <h1 className="text-[1.125rem] font-bold tracking-tight text-ink font-sans leading-none">
-                AeroSentinel
-              </h1>
-              <span className="text-[0.625rem] text-accent font-mono font-semibold px-1.5 py-0.2 border border-accent/30 rounded bg-accent/10">
-                v0.1.0
-              </span>
-            </div>
-            <p className="text-[0.6875rem] text-muted font-sans font-medium hidden sm:block mt-0.5">
-              MoES · IMD AWS Quality Control
-            </p>
+          <div className="flex items-center space-x-2">
+            <span className="font-semibold text-ink text-sm sm:text-base tracking-tight font-sans">
+              AeroSentinel
+            </span>
+            <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-surface border border-line text-muted hidden sm:inline-block">
+              v2.4-PROD
+            </span>
           </div>
         </div>
-
-        {/* Navigation Tabs */}
-        <nav className="flex items-center space-x-1 border-l border-line pl-3 lg:pl-5 overflow-x-auto py-1 scrollbar-none">
-          <button
-            onClick={() => onTabChange('map')}
-            className={`flex items-center space-x-1.5 px-2.5 py-1.5 rounded text-[0.8125rem] font-medium transition-colors whitespace-nowrap ${
-              activeTab === 'map'
-                ? 'bg-accent text-white shadow-sm'
-                : 'text-muted hover:text-ink hover:bg-surface'
-            }`}
-          >
-            <Map className="w-3.5 h-3.5" />
-            <span>Fleet Map</span>
-          </button>
-
-          <button
-            onClick={() => onTabChange('detail')}
-            className={`flex items-center space-x-1.5 px-2.5 py-1.5 rounded text-[0.8125rem] font-medium transition-colors whitespace-nowrap ${
-              activeTab === 'detail'
-                ? 'bg-accent text-white shadow-sm'
-                : 'text-muted hover:text-ink hover:bg-surface'
-            }`}
-          >
-            <Activity className="w-3.5 h-3.5" />
-            <span>Station Detail</span>
-          </button>
-
-          <button
-            onClick={() => onTabChange('live')}
-            className={`flex items-center space-x-1.5 px-2.5 py-1.5 rounded text-[0.8125rem] font-medium transition-colors whitespace-nowrap ${
-              activeTab === 'live'
-                ? 'bg-accent text-white shadow-sm'
-                : 'text-muted hover:text-ink hover:bg-surface'
-            }`}
-          >
-            <Radio className="w-3.5 h-3.5 text-status-valid animate-pulse" />
-            <span>Live Stream</span>
-          </button>
-
-          <button
-            onClick={() => onTabChange('alerts')}
-            className={`flex items-center space-x-1.5 px-2.5 py-1.5 rounded text-[0.8125rem] font-medium transition-colors whitespace-nowrap ${
-              activeTab === 'alerts'
-                ? 'bg-accent text-white shadow-sm'
-                : 'text-muted hover:text-ink hover:bg-surface'
-            }`}
-          >
-            <ShieldAlert className="w-3.5 h-3.5" />
-            <span>Alerts</span>
-            {activeAlertsCount !== undefined && activeAlertsCount > 0 && (
-              <span className="ml-1 px-1.5 py-0.2 rounded-full text-[0.625rem] font-mono bg-status-anomalous text-white font-bold">
-                {activeAlertsCount}
-              </span>
-            )}
-          </button>
-
-          <button
-            onClick={() => onTabChange('tasks')}
-            className={`flex items-center space-x-1.5 px-2.5 py-1.5 rounded text-[0.8125rem] font-medium transition-colors whitespace-nowrap ${
-              activeTab === 'tasks'
-                ? 'bg-accent text-white shadow-sm'
-                : 'text-muted hover:text-ink hover:bg-surface'
-            }`}
-          >
-            <CheckSquare className="w-3.5 h-3.5" />
-            <span>Role Tasks</span>
-            {pendingTasksCount !== undefined && pendingTasksCount > 0 && (
-              <span className="ml-1 px-1.5 py-0.2 rounded-full text-[0.625rem] font-mono bg-accent text-white font-bold">
-                {pendingTasksCount}
-              </span>
-            )}
-          </button>
-
-          <button
-            onClick={() => onTabChange('upload')}
-            className={`flex items-center space-x-1.5 px-2.5 py-1.5 rounded text-[0.8125rem] font-medium transition-colors whitespace-nowrap ${
-              activeTab === 'upload'
-                ? 'bg-accent text-white shadow-sm'
-                : 'text-muted hover:text-ink hover:bg-surface'
-            }`}
-          >
-            <UploadCloud className="w-3.5 h-3.5" />
-            <span>Upload Data</span>
-          </button>
-
-          <button
-            onClick={() => onTabChange('maintenance')}
-            className={`flex items-center space-x-1.5 px-2.5 py-1.5 rounded text-[0.8125rem] font-medium transition-colors whitespace-nowrap ${
-              activeTab === 'maintenance'
-                ? 'bg-accent text-white shadow-sm'
-                : 'text-muted hover:text-ink hover:bg-surface'
-            }`}
-          >
-            <Wrench className="w-3.5 h-3.5" />
-            <span>Maintenance</span>
-          </button>
-
-          <button
-            onClick={() => onTabChange('system')}
-            className={`flex items-center space-x-1.5 px-2.5 py-1.5 rounded text-[0.8125rem] font-medium transition-colors whitespace-nowrap ${
-              activeTab === 'system'
-                ? 'bg-accent text-white shadow-sm'
-                : 'text-muted hover:text-ink hover:bg-surface'
-            }`}
-          >
-            <Server className="w-3.5 h-3.5" />
-            <span>Health</span>
-          </button>
-        </nav>
       </div>
 
-      <div className="flex items-center space-x-3">
-        {/* RBAC Role Switcher */}
-        <div className="flex items-center space-x-1.5 bg-surface border border-line rounded px-2.5 py-1 text-xs shadow-xs">
-          <Shield className="w-3.5 h-3.5 text-accent" />
-          <span className="text-muted font-mono hidden md:inline text-[0.75rem]">Role:</span>
-          <select
-            value={currentRoleKey}
-            onChange={(e) => handleRoleSwitch(e.target.value)}
-            disabled={switchingRole}
-            className="bg-transparent text-ink font-semibold focus:outline-none cursor-pointer text-xs"
-            aria-label="Switch RBAC user role"
-          >
-            <option value="admin">Admin (Full Access)</option>
-            <option value="operator">DQO (QC Triage)</option>
-            <option value="tech">Field Tech (Hardware)</option>
-            <option value="forecaster">Forecaster (Observer)</option>
-          </select>
-        </div>
-
-        {/* System Health Pulse */}
-        <div className="hidden 2xl:flex items-center space-x-2 text-[0.75rem] font-mono border-l border-line pl-3">
-          {systemHealthy === null ? (
-            <span className="text-muted">CONNECTING</span>
-          ) : systemHealthy ? (
-            <span className="text-status-valid flex items-center space-x-1">
-              <span className="w-2 h-2 rounded-full bg-status-valid inline-block animate-ping" />
-              <span>ONLINE</span>
-            </span>
+      {/* Right: Operational Status, Alerts Notification, Role Switcher, Profile, Theme */}
+      <div className="flex items-center space-x-2 sm:space-x-3 text-xs">
+        {/* System Operational Status Indicator */}
+        <div
+          onClick={() => onNavigateTab('health')}
+          className="hidden sm:flex items-center space-x-1.5 px-2.5 py-1 rounded bg-surface border border-line cursor-pointer hover:border-muted transition-colors"
+          title="Click to view detailed system health"
+        >
+          {systemHealthy === true ? (
+            <>
+              <span className="w-2 h-2 rounded-full bg-[#3FB876] inline-block animate-pulse" />
+              <span className="font-mono text-[11px] text-[#3FB876] font-semibold tracking-wider">
+                OPERATIONAL
+              </span>
+            </>
+          ) : systemHealthy === false ? (
+            <>
+              <span className="w-2 h-2 rounded-full bg-[#E0655C] inline-block animate-pulse" />
+              <span className="font-mono text-[11px] text-[#E0655C] font-semibold tracking-wider">
+                DEGRADED
+              </span>
+            </>
           ) : (
-            <span className="text-status-anomalous flex items-center space-x-1">
-              <span className="w-2 h-2 rounded-full bg-status-anomalous inline-block" />
-              <span>DEGRADED</span>
-            </span>
+            <>
+              <Activity className="w-3.5 h-3.5 text-muted animate-spin" />
+              <span className="font-mono text-[11px] text-muted">CHECKING</span>
+            </>
           )}
         </div>
 
-        {/* Dark/Light Theme Toggle */}
+        {/* Notification Bell with Badge */}
+        <button
+          onClick={() => onNavigateTab('alerts')}
+          className="relative p-2 rounded text-muted hover:text-ink hover:bg-hover transition-colors"
+          title={`Active Alerts (${activeAlertsCount})`}
+          aria-label="View Alerts Feed"
+        >
+          <Bell className="w-4 h-4" />
+          {activeAlertsCount > 0 && (
+            <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-[#E0655C] ring-2 ring-panel" />
+          )}
+        </button>
+
+        {/* Theme Toggle Button */}
         <button
           onClick={toggleTheme}
-          aria-label={`Switch to ${theme === 'light' ? 'dark' : 'light'} mode`}
-          className="px-2.5 py-1 text-[0.75rem] font-sans border border-line rounded hover:bg-surface text-ink transition-colors flex items-center space-x-1.5"
+          className="p-2 rounded text-muted hover:text-ink hover:bg-hover transition-colors"
+          title={theme === 'dark' ? 'Switch to Light Theme' : 'Switch to Dark Theme'}
+          aria-label="Toggle Color Theme"
         >
-          <span>{theme === 'light' ? '☾ Dark' : '☀ Light'}</span>
+          {theme === 'dark' ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
         </button>
+
+        <div className="h-5 w-px bg-line hidden sm:block" />
+
+        {/* Role Switcher & Authenticated Profile Dropdown */}
+        <div className="relative">
+          <button
+            onClick={() => setRoleMenuOpen(!roleMenuOpen)}
+            disabled={switchingRole}
+            className="flex items-center space-x-2 pl-2 pr-2.5 py-1 rounded bg-surface border border-line hover:border-muted text-ink transition-colors"
+            title="Switch authenticated demonstration role"
+          >
+            <div className="w-6 h-6 rounded bg-accent/20 border border-accent/40 flex items-center justify-center text-accent font-mono text-[11px] font-bold">
+              {currentUser?.name?.charAt(0) || 'U'}
+            </div>
+            <div className="text-left hidden md:block">
+              <div className="font-medium text-ink text-[11px] truncate max-w-[110px] leading-tight">
+                {currentUser?.name?.split(' ')[0] || 'Operator'}
+              </div>
+              <span
+                className={`text-[9px] font-mono px-1 py-0.2 rounded border font-semibold uppercase ${getRoleBadgeColor(
+                  currentUser?.role
+                )}`}
+              >
+                {currentUser?.role || 'admin'}
+              </span>
+            </div>
+            <ChevronDown className="w-3.5 h-3.5 text-muted ml-0.5" />
+          </button>
+
+          {/* Role Switcher Menu */}
+          {roleMenuOpen && (
+            <div className="absolute right-0 top-full mt-1.5 w-60 bg-panel border border-line rounded-lg shadow-xl py-1.5 z-50 font-sans">
+              <div className="px-3 py-1.5 border-b border-line text-[10px] font-mono text-muted uppercase tracking-wider">
+                Select Active Operator Role
+              </div>
+
+              {Object.entries(DEMO_USERS).map(([key, u]) => {
+                const isSelected = currentUser?.role === u.role;
+                return (
+                  <button
+                    key={key}
+                    onClick={() => handleRoleSwitch(key)}
+                    className={`w-full px-3 py-2 text-left flex items-start space-x-2.5 hover:bg-hover transition-colors ${
+                      isSelected ? 'bg-accent/10 border-l-2 border-accent' : ''
+                    }`}
+                  >
+                    <Shield className={`w-4 h-4 mt-0.5 shrink-0 ${isSelected ? 'text-accent' : 'text-muted'}`} />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between">
+                        <span className={`text-xs font-medium truncate ${isSelected ? 'text-accent' : 'text-ink'}`}>
+                          {u.name}
+                        </span>
+                        {isSelected && (
+                          <span className="text-[10px] font-mono text-accent font-bold">ACTIVE</span>
+                        )}
+                      </div>
+                      <div className="text-[11px] text-muted truncate">{u.title}</div>
+                      <span
+                        className={`inline-block mt-1 text-[9px] font-mono px-1 py-0.2 rounded border uppercase ${getRoleBadgeColor(
+                          u.role
+                        )}`}
+                      >
+                        {u.role}
+                      </span>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
       </div>
     </header>
   );
