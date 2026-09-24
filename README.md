@@ -205,6 +205,7 @@ python backend/storage/seed.py
 DATABASE_URL="sqlite:////$(pwd)/backend/aerosentinel.db" uvicorn main:app --app-dir backend --reload --host 127.0.0.1 --port 8000
 ```
 *API documentation and Swagger UI:* `http://127.0.0.1:8000/docs`
+*Health Check Endpoint:* `http://127.0.0.1:8000/health`
 
 ### 5. Launch Frontend Dashboard
 ```bash
@@ -213,6 +214,24 @@ npm install
 npm run dev -- --host 127.0.0.1 --port 5173
 ```
 *AeroSentinel Operations Dashboard:* `http://127.0.0.1:5173`
+
+---
+
+## 🚀 Production Deployment Architecture
+
+AeroSentinel is fully prepared for multi-cloud production deployment:
+
+- **Frontend**: [Vercel](https://vercel.com) (React 18 + TypeScript + Vite SPA, edge routing & security headers via `vercel.json`).
+- **Backend**: [Render](https://render.com) (FastAPI + Python 3.11 + Uvicorn, automated Blueprint via `render.yaml`, `/health` probes).
+- **Database & Cloud Platform**: [Supabase](https://supabase.com)
+  - **PostgreSQL 16**: High-performance transaction connection pooling (`port 6543`), composite indexes for time-series observations.
+  - **Supabase Auth**: Secure JWT-based authentication with role enforcement (`viewer` default, strict admin assignment).
+  - **Supabase Realtime**: Live change-data-capture (CDC) subscriptions on `alerts`, `stations`, and `qc_results`.
+  - **Supabase Storage**: Private encrypted buckets (`aerosentinel-uploads`, `aerosentinel-reports`).
+  - **Row Level Security (RLS)**: Enforced table-level access policies preventing unauthorized read/write access.
+- **ML Processing**: Retained natively inside FastAPI (PyTorch LSTM-AE, Isolation Forest, KDTree spatial validator).
+
+> 📘 **Step-by-Step Production Guide:** See [DEPLOYMENT.md](file:///Users/vikrantchauhan/Desktop/AeroSentinel/DEPLOYMENT.md) for the complete cloud provisioning and migration runbook.
 
 ---
 
@@ -225,7 +244,7 @@ AeroSentinel is validated by an extensive test suite covering pure business logi
 pytest backend/tests -v
 
 # Verification summary:
-# 36 passed in 4.23s (100% test pass rate)
+# 122 passed (100% test pass rate)
 ```
 
 ```bash
@@ -234,8 +253,9 @@ cd frontend
 npm run build
 
 # Verification summary:
-# ✓ built in 2.66s with 0 errors
+# ✓ built in 3.03s with 0 errors
 ```
+
 
 ---
 

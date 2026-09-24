@@ -13,15 +13,40 @@ app = FastAPI(
     openapi_url="/openapi.json",
 )
 
-# CORS middleware
-origins = settings.CORS_ORIGINS if isinstance(settings.CORS_ORIGINS, list) else ["*"]
+from storage.db import check_db_connection
+
+# Production-safe CORS middleware
+cors_list = (
+    settings.CORS_ORIGINS
+    if isinstance(settings.CORS_ORIGINS, list)
+    else [o.strip() for o in str(settings.CORS_ORIGINS).split(",") if o.strip()]
+)
+if "*" in cors_list or not cors_list:
+    cors_list = [
+        "http://localhost:3000",
+        "http://localhost:5173",
+        "http://127.0.0.1:3000",
+        "http://127.0.0.1:5173",
+    ]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
+    allow_origins=cors_list,
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"],
     allow_headers=["*"],
 )
+
+@app.get("/health", tags=["Health"])
+async def root_health():
+    """Production health check endpoint verifying database connectivity."""
+    db_ok, _ = check_db_connection()
+    return {
+        "status": "healthy" if db_ok else "degraded",
+        "database": "connected" if db_ok else "disconnected",
+        "app": settings.APP_NAME,
+        "version": settings.APP_VERSION,
+    }
 
 from ingestion.routes import router as ingestion_router
 

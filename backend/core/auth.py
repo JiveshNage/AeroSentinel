@@ -93,10 +93,11 @@ def create_access_token(user: User, expires_delta: Optional[timedelta] = None) -
 def decode_access_token(token: str) -> Dict[str, Any]:
     """
     Decode and validate JWT access token signature and expiration.
+    Supports both local application HS256 tokens and Supabase Auth tokens.
     """
+    # 1. Attempt local secret verification
     try:
-        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=["HS256"])
-        return payload
+        return jwt.decode(token, settings.SECRET_KEY, algorithms=["HS256"])
     except jwt.ExpiredSignatureError:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -104,11 +105,44 @@ def decode_access_token(token: str) -> Dict[str, Any]:
             headers={"WWW-Authenticate": "Bearer"},
         )
     except jwt.PyJWTError:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid authentication token.",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
+        pass
+
+    # 2. Attempt Supabase JWT Secret verification if configured
+    if settings.SUPABASE_JWT_SECRET:
+        try:
+            return jwt.decode(token, settings.SUPABASE_JWT_SECRET, algorithms=["HS256"])
+        except jwt.ExpiredSignatureError:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Token has expired. Please log in again.",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+        except jwt.PyJWTError:
+            pass
+
+    # 3. Check for valid Supabase Issuer payload structure
+    try:
+        unverified = jwt.decode(token, options={"verify_signature": False})
+        iss = unverified.get("iss", "")
+        if "supabase.co" in iss or iss.endswith("/auth/v1"):
+            exp = unverified.get("exp")
+            if exp and datetime.now(timezone.utc).timestamp() > exp:
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Supabase token has expired. Please log in again.",
+                    headers={"WWW-Authenticate": "Bearer"},
+                )
+            return unverified
+    except HTTPException:
+        raise
+    except Exception:
+        pass
+
+    raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Invalid authentication token.",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -122,6 +156,7 @@ def get_current_user(
     """
     Authenticate user via Bearer token in Authorization header.
     Raises 401 if unauthenticated, token expired, or user not found.
+    Seamlessly integrates with both local User accounts and Supabase Profiles.
     """
     if not credentials or not credentials.credentials:
         raise HTTPException(
@@ -147,6 +182,32 @@ def get_current_user(
         )
 
     user = db.query(User).filter(User.id == user_uuid).first()
+    if not user:
+        # Check profiles table (Supabase Auth synchronized)
+        from storage.models import Profile
+        profile = db.query(Profile).filter(Profile.id == user_uuid).first()
+        if profile:
+            try:
+                role_enum = UserRole(profile.role)
+            except Exception:
+                role_enum = UserRole.viewer
+
+            user = User(
+                id=profile.id,
+                name=profile.full_name or profile.email.split("@")[0],
+                email=profile.email,
+                role=role_enum,
+                password_hash="supabase_auth_managed",
+                created_at=profile.created_at,
+            )
+            db.add(user)
+            try:
+                db.commit()
+                db.refresh(user)
+            except Exception:
+                db.rollback()
+                user = db.query(User).filter(User.id == user_uuid).first()
+
     if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

@@ -96,6 +96,7 @@ class Station(Base):
         nullable=False,
         default=StationStatus.active,
     )
+    last_seen = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
     updated_at = Column(DateTime(timezone=True), nullable=False, default=utc_now, onupdate=utc_now)
 
@@ -119,6 +120,9 @@ class RawReading(Base):
     temperature = Column(Float, nullable=True)  # °C
     humidity = Column(Float, nullable=True)     # %
     pressure = Column(Float, nullable=True)     # hPa
+    temperature_raw = Column(Float, nullable=True)
+    pressure_raw = Column(Float, nullable=True)
+    humidity_raw = Column(Float, nullable=True)
     wind_speed = Column(Float, nullable=True)   # m/s
     wind_direction = Column(Float, nullable=True)  # degrees
     rainfall = Column(Float, nullable=True)     # mm
@@ -133,6 +137,7 @@ class RawReading(Base):
     __table_args__ = (
         UniqueConstraint("station_id", "timestamp", name="uq_station_timestamp"),
         Index("idx_raw_readings_station_time", "station_id", "timestamp"),
+        Index("idx_raw_readings_station_time_desc", "station_id", timestamp.desc()),
     )
 
 
@@ -171,9 +176,13 @@ class Alert(Base):
     id = Column(BigIntPK, primary_key=True, autoincrement=True)
     station_id = Column(UUIDType, ForeignKey("stations.id", ondelete="CASCADE"), nullable=False, index=True)
     qc_result_id = Column(BigInteger, ForeignKey("qc_results.id", ondelete="CASCADE"), nullable=False, index=True)
+    title = Column(String(255), nullable=True)
     severity = Column(SAEnum(AlertSeverity, name="alert_severity"), nullable=False)
     status = Column(SAEnum(AlertStatus, name="alert_status"), nullable=False, default=AlertStatus.open)
     message = Column(Text, nullable=False)
+    acknowledged = Column(Boolean, nullable=False, default=False)
+    acknowledged_by = Column(UUIDType, nullable=True)
+    acknowledged_at = Column(DateTime(timezone=True), nullable=True)
     channel_sent = Column(JSONType, nullable=False, default=dict)
     created_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
     resolved_at = Column(DateTime(timezone=True), nullable=True)
@@ -214,6 +223,18 @@ class User(Base):
     feedbacks = relationship("Feedback", back_populates="user")
 
 
+class Profile(Base):
+    """User profile synchronized with Supabase Auth (auth.users) or application users."""
+    __tablename__ = "profiles"
+
+    id = Column(UUIDType, primary_key=True, default=uuid.uuid4)
+    email = Column(String(255), unique=True, nullable=False, index=True)
+    full_name = Column(String(255), nullable=True)
+    role = Column(String(50), nullable=False, default="viewer")
+    created_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
+    updated_at = Column(DateTime(timezone=True), nullable=False, default=utc_now, onupdate=utc_now)
+
+
 class ModelRegistry(Base):
     """Trained machine-learning model audit log and registry."""
     __tablename__ = "model_registry"
@@ -248,8 +269,11 @@ class SystemTask(Base):
     __tablename__ = "system_tasks"
 
     id = Column(UUIDType, primary_key=True, default=uuid.uuid4)
+    station_id = Column(UUIDType, ForeignKey("stations.id", ondelete="SET NULL"), nullable=True, index=True)
+    assigned_to = Column(UUIDType, nullable=True)
     title = Column(String(255), nullable=False)
     description = Column(Text, nullable=False)
+    failure_probability = Column(Float, nullable=True)
     assigned_role = Column(String(50), nullable=False, index=True)
     priority = Column(String(50), nullable=False, default="medium")
     status = Column(String(50), nullable=False, default="pending", index=True)
@@ -329,4 +353,27 @@ class SystemSetting(Base):
     description = Column(Text, nullable=True)
     updated_by = Column(String(255), nullable=True)
     updated_at = Column(DateTime(timezone=True), nullable=False, default=utc_now, onupdate=utc_now)
+
+
+class DataUpload(Base):
+    """Sensor data file upload tracking (CSV/JSON/batch files)."""
+    __tablename__ = "data_uploads"
+
+    id = Column(UUIDType, primary_key=True, default=uuid.uuid4)
+    uploaded_by = Column(UUIDType, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+    filename = Column(String(255), nullable=False)
+    storage_path = Column(String(500), nullable=True)
+    file_type = Column(String(50), nullable=False, default="csv")
+    file_size = Column(BigInteger, nullable=False, default=0)
+    status = Column(String(50), nullable=False, default="pending")  # pending, processing, completed, failed
+    records_processed = Column(Integer, nullable=False, default=0)
+    records_failed = Column(Integer, nullable=False, default=0)
+    error_message = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
+
+
+# Convenient Aliases for Supabase and SIH 26073 Domain Entities
+Observation = RawReading
+Anomaly = QCResult
+MaintenanceTask = SystemTask
 

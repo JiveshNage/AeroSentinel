@@ -372,6 +372,26 @@ def process_file_upload(
                 )
             )
 
+    # Record upload metadata in data_uploads table
+    try:
+        from storage.models import DataUpload
+        upload_record = DataUpload(
+            id=uuid.uuid4(),
+            filename=filename,
+            storage_path=f"aerosentinel-uploads/{filename}",
+            file_type="json" if filename.lower().endswith(".json") else "csv",
+            file_size=len(file_bytes),
+            status="completed",
+            records_processed=ingested_count,
+            records_failed=duplicates_skipped,
+            error_message=None,
+            created_at=datetime.now(timezone.utc),
+        )
+        db.add(upload_record)
+        db.commit()
+    except Exception:
+        pass
+
     return FileUploadResponse(
         status="success",
         filename=filename,

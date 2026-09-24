@@ -1,0 +1,30 @@
+services:
+  - type: web
+    name: aerosentinel-backend
+    runtime: python
+    rootDir: backend
+    buildCommand: "pip install --upgrade pip && pip install -r requirements.txt && alembic upgrade head"
+    startCommand: "uvicorn main:app --host 0.0.0.0 --port $PORT"
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: APP_DEBUG
+        value: "false"
+      - key: API_V1_STR
+        value: /api
+      - key: DATABASE_URL
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_ANON_KEY
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: JWT_SECRET_KEY
+        generateValue: true
+      - key: CORS_ORIGINS
+        value: "https://aerosentinel.vercel.app,http://localhost:5173"
+      - key: MODEL_STORAGE_PATH
+        value: "backend/ml_engine/models"

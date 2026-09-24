@@ -28,6 +28,7 @@ import {
   submitAlertFeedback,
   fetchFeedbackList,
 } from '../api/alerts';
+import { subscribeToAlerts } from '../api/realtime';
 import {
   fetchRetrainStats,
   triggerRetraining,
@@ -215,6 +216,53 @@ export const AlertsFeedView: React.FC<AlertsFeedViewProps> = ({ onInspectStation
     return () => {
       clearTimeout(reconnectTimer);
       if (ws) ws.close();
+    };
+  }, []);
+
+  // Supabase Realtime alerts subscription (database-level CDC synchronization)
+  useEffect(() => {
+    const unsubscribe = subscribeToAlerts({
+      onInsert: (row) => {
+        if (!row || !row.id) return;
+        const incoming: AlertItem = {
+          id: row.id,
+          station_id: row.station_id || '',
+          station_code: row.station_code || 'NCR001',
+          station_name: row.station_name || 'Station',
+          variable: row.variable || 'atmospheric',
+          severity: row.severity || 'medium',
+          status: row.status || (row.acknowledged ? 'acknowledged' : 'open'),
+          message: row.message || row.title || 'Live Anomaly Alert',
+          channel_sent: { supabase_realtime: true },
+          created_at: row.created_at || new Date().toISOString(),
+          feedback_label: null,
+        };
+        setAlerts((prev) => {
+          const exists = prev.find((a) => a.id === incoming.id);
+          if (exists) {
+            return prev.map((a) => (a.id === incoming.id ? { ...a, ...incoming } : a));
+          }
+          return [incoming, ...prev];
+        });
+        setNewAlertCount((cnt) => cnt + 1);
+      },
+      onUpdate: (row) => {
+        if (!row || !row.id) return;
+        setAlerts((prev) =>
+          prev.map((a) =>
+            a.id === row.id
+              ? {
+                  ...a,
+                  status: row.status || (row.acknowledged ? 'acknowledged' : a.status),
+                  severity: row.severity || a.severity,
+                }
+              : a
+          )
+        );
+      },
+    });
+    return () => {
+      unsubscribe();
     };
   }, []);
 

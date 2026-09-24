@@ -5,14 +5,26 @@ from sqlalchemy.orm import sessionmaker, Session
 
 from core.config import settings
 
-# Engine configuration
-is_sqlite = settings.DATABASE_URL.startswith("sqlite")
+# Engine configuration with URL normalization for Supabase PostgreSQL
+db_url = settings.DATABASE_URL
+if db_url.startswith("postgres://"):
+    db_url = db_url.replace("postgres://", "postgresql+psycopg2://", 1)
+elif db_url.startswith("postgresql://") and "+psycopg2" not in db_url:
+    db_url = db_url.replace("postgresql://", "postgresql+psycopg2://", 1)
+
+is_sqlite = db_url.startswith("sqlite")
 connect_args = {"check_same_thread": False} if is_sqlite else {}
+pool_kwargs = {} if is_sqlite else {
+    "pool_size": 10,
+    "max_overflow": 20,
+    "pool_recycle": 300,
+    "pool_pre_ping": True,
+}
 
 engine = create_engine(
-    settings.DATABASE_URL,
+    db_url,
     connect_args=connect_args,
-    pool_pre_ping=True,
+    **pool_kwargs,
 )
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)

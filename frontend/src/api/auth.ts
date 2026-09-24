@@ -3,6 +3,8 @@
  * AeroSentinel (SIH26073)
  */
 
+import { supabase } from './supabase';
+
 export type UserRoleType =
   | 'admin'
   | 'forecaster'
@@ -259,3 +261,92 @@ export async function fetchCurrentUser(): Promise<AuthUser> {
   localStorage.setItem(USER_KEY, JSON.stringify(user));
   return user;
 }
+
+/**
+ * Sign in using Supabase Auth (Email + Password).
+ * Extracts profile and role directly from Supabase session.
+ */
+export async function signInWithSupabase(email: string, pass: string): Promise<LoginResponse> {
+  if (!supabase) {
+    throw new Error('Supabase client is not configured.');
+  }
+
+  const { data, error } = await supabase.auth.signInWithPassword({
+    email,
+    password: pass,
+  });
+
+  if (error || !data.session || !data.user) {
+    throw new Error(error?.message || 'Supabase authentication failed');
+  }
+
+  const role: UserRoleType = (data.user.user_metadata?.role as UserRoleType) || 'viewer';
+  const fullName: string = data.user.user_metadata?.full_name || data.user.email?.split('@')[0] || 'User';
+
+  const authUser: AuthUser = {
+    id: data.user.id,
+    name: fullName,
+    email: data.user.email || email,
+    role,
+    permissions: ROLE_PERMISSIONS_FALLBACK[role] || [],
+    created_at: data.user.created_at,
+  };
+
+  const loginRes: LoginResponse = {
+    access_token: data.session.access_token,
+    token_type: 'bearer',
+    user: authUser,
+  };
+
+  setStoredAuth(loginRes.access_token, loginRes.user);
+  return loginRes;
+}
+
+/**
+ * Register a new user using Supabase Auth.
+ * Enforces default role: 'viewer' (users cannot choose elevated roles during signup).
+ */
+export async function signUpWithSupabase(
+  email: string,
+  pass: string,
+  fullName: string
+): Promise<{ user: any; session: any }> {
+  if (!supabase) {
+    throw new Error('Supabase client is not configured.');
+  }
+
+  // Force default role to 'viewer' per security requirements
+  const { data, error } = await supabase.auth.signUp({
+    email,
+    password: pass,
+    options: {
+      data: {
+        full_name: fullName,
+        role: 'viewer',
+      },
+    },
+  });
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return data;
+}
+
+/**
+ * Global Sign out helper: clears Supabase session and local storage.
+ */
+export async function signOutUser(): Promise<void> {
+  try {
+    if (supabase) {
+      await supabase.auth.signOut();
+    }
+  } catch (err) {
+    console.error('Error signing out of Supabase:', err);
+  } finally {
+    clearStoredAuth();
+  }
+}
+
+

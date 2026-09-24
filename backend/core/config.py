@@ -1,4 +1,4 @@
-from typing import List, Union
+from typing import List, Union, Optional
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -14,6 +14,12 @@ class Settings(BaseSettings):
 
     SECRET_KEY: str = "aerosentinel-secret-jwt-key-sih26073-moes-imd"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 720
+
+    # Supabase Configuration
+    SUPABASE_URL: Optional[str] = None
+    SUPABASE_ANON_KEY: Optional[str] = None
+    SUPABASE_SERVICE_ROLE_KEY: Optional[str] = None
+    SUPABASE_JWT_SECRET: Optional[str] = None
 
     CORS_ORIGINS: Union[str, List[str]] = [
         "http://localhost:3000",
