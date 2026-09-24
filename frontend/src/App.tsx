@@ -14,6 +14,7 @@ import { AdminUsersView } from './pages/AdminUsersView';
 import { AdminRolesView } from './pages/AdminRolesView';
 import { AdminAuditView } from './pages/AdminAuditView';
 import { AdminSettingsView } from './pages/AdminSettingsView';
+import { DocumentationView } from './pages/DocumentationView';
 import { fetchHealth, HealthResponse } from './api/client';
 import { fetchAlerts } from './api/alerts';
 import { fetchTasks } from './api/tasks';
@@ -214,6 +215,11 @@ export const App: React.FC = () => {
                 setActiveTab('detail');
               }}
             />
+          ) : activeTab === 'docs' ? (
+            <DocumentationView
+              currentUser={currentUser}
+              onNavigateTab={setActiveTab}
+            />
           ) : activeTab === 'admin_users' ? (
             <AdminUsersView />
           ) : activeTab === 'admin_roles' ? (
@@ -238,11 +244,19 @@ export const App: React.FC = () => {
           <span>· Automated Weather Station AI Quality Control (SIH26073)</span>
         </div>
         <div className="flex items-center space-x-3 text-[10px]">
+          <button
+            onClick={() => setActiveTab('docs')}
+            className="text-accent hover:underline flex items-center gap-1 font-semibold"
+            title="Open Operational User Manual and Technical Specifications"
+          >
+            <span>User Manual & Docs (PDF)</span>
+          </button>
+          <span>•</span>
           <span>Role Clearance: <strong className="text-accent uppercase">{currentUser?.role || 'admin'}</strong></span>
           <span>•</span>
           <span>Permissions Active: <strong className="text-ink">{currentUser?.permissions?.length || 21} / 21</strong></span>
           <span>•</span>
-          <span>FastAPI + TimescaleDB + IsolationForest</span>
+          <span>FastAPI + SQLite + IsolationForest</span>
         </div>
       </footer>
     </div>

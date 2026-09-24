@@ -7,6 +7,7 @@ import {
   Shield,
   Activity,
   ChevronDown,
+  BookOpen,
 } from 'lucide-react';
 import { DEMO_USERS, getStoredUser, loginWithCredentials, AuthUser } from '../api/auth';
 import { AppNavTab } from './Sidebar';
@@ -162,6 +163,17 @@ export const Header: React.FC<HeaderProps> = ({
           {activeAlertsCount > 0 && (
             <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-[#E0655C] ring-2 ring-panel" />
           )}
+        </button>
+
+        {/* User Manual & Documentation Quick Link */}
+        <button
+          onClick={() => onNavigateTab('docs')}
+          className="p-1.5 sm:px-2.5 sm:py-1 rounded bg-surface border border-line text-muted hover:text-ink hover:border-accent/40 transition-colors flex items-center gap-1.5"
+          title="Open User Manual & Technical Documentation"
+          aria-label="User Manual & Docs"
+        >
+          <BookOpen className="w-3.5 h-3.5 text-accent" />
+          <span className="text-[11px] font-medium font-sans hidden lg:inline text-ink">User Manual</span>
         </button>
 
         {/* Theme Toggle Button */}

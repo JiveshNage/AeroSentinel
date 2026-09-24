@@ -16,6 +16,7 @@ import {
   ChevronLeft,
   ChevronRight,
   X,
+  BookOpen,
 } from 'lucide-react';
 import { AuthUser, PermissionCode, hasPermission } from '../api/auth';
 
@@ -30,6 +31,7 @@ export type AppNavTab =
   | 'tasks'
   | 'upload'
   | 'maintenance'
+  | 'docs'
   | 'admin_users'
   | 'admin_roles'
   | 'admin_audit'
@@ -174,6 +176,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
           label: 'System Settings',
           icon: Sliders,
           permission: 'system.manage',
+        },
+      ],
+    },
+    {
+      title: 'Resources',
+      items: [
+        {
+          id: 'docs',
+          label: 'User Manual & Docs',
+          icon: BookOpen,
         },
       ],
     },

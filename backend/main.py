@@ -31,6 +31,35 @@ app.include_router(api_router, prefix=settings.API_V1_STR)
 app.include_router(ingestion_router)
 
 
+from pathlib import Path
+from fastapi.responses import FileResponse
+
+DOCS_DIR = Path(__file__).resolve().parent.parent / "docs"
+
+@app.api_route("/api/docs/download/manual", methods=["GET", "HEAD"], tags=["Documentation"])
+async def download_user_manual():
+    pdf_path = DOCS_DIR / "AeroSentinel_User_Manual.pdf"
+    if not pdf_path.exists():
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="User manual PDF not found")
+    return FileResponse(
+        path=str(pdf_path),
+        filename="AeroSentinel_User_Manual.pdf",
+        media_type="application/pdf",
+    )
+
+@app.api_route("/api/docs/download/spec", methods=["GET", "HEAD"], tags=["Documentation"])
+async def download_technical_spec():
+    pdf_path = DOCS_DIR / "AeroSentinel_Technical_Product_Spec.pdf"
+    if not pdf_path.exists():
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="Technical specification PDF not found")
+    return FileResponse(
+        path=str(pdf_path),
+        filename="AeroSentinel_Technical_Product_Spec.pdf",
+        media_type="application/pdf",
+    )
+
 @app.get("/", tags=["Root"])
 async def root():
     return {
@@ -38,4 +67,6 @@ async def root():
         "version": settings.APP_VERSION,
         "docs": "/docs",
         "health": f"{settings.API_V1_STR}/health",
+        "user_manual_pdf": "/api/docs/download/manual",
+        "technical_spec_pdf": "/api/docs/download/spec",
     }
