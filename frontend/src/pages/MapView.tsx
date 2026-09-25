@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { StationSummary, fetchStations, StationHealthStatus } from '../api/stations';
 import { StationMap } from '../components/StationMap';
+import { wsUrl } from '../api/client';
 
 interface MapViewProps {
   onInspectStation?: (stationId: string) => void;
@@ -58,14 +59,13 @@ export const MapView: React.FC<MapViewProps> = ({ onInspectStation }) => {
 
   // Connect to live alerts WebSocket (/api/alerts/ws)
   useEffect(() => {
+
     let ws: WebSocket | null = null;
     let reconnectTimeout: ReturnType<typeof setTimeout>;
 
     const connectWs = () => {
-      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      const wsUrl = `${protocol}//${window.location.host}/api/alerts/ws`;
+      ws = new WebSocket(wsUrl('/api/alerts/ws'));
 
-      ws = new WebSocket(wsUrl);
 
       ws.onopen = () => {
         setWsConnected(true);

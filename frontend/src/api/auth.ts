@@ -219,19 +219,15 @@ export function hasPermission(user: AuthUser | null, permission: PermissionCode)
   return userPerms.includes(permission);
 }
 
+import { apiUrl, fetchJson } from './client';
+
 export async function loginWithCredentials(email: string, pass: string): Promise<LoginResponse> {
-  const res = await fetch('/api/auth/login', {
+  const data = await fetchJson<LoginResponse>(apiUrl('/api/auth/login'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email, password: pass }),
   });
 
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.detail || `Login failed with HTTP ${res.status}`);
-  }
-
-  const data: LoginResponse = await res.json();
   if (!data.user.permissions || data.user.permissions.length === 0) {
     data.user.permissions = ROLE_PERMISSIONS_FALLBACK[data.user.role] || [];
   }
@@ -245,22 +241,22 @@ export async function fetchCurrentUser(): Promise<AuthUser> {
     throw new Error('No active token');
   }
 
-  const res = await fetch('/api/auth/me', {
-    headers: { Authorization: `Bearer ${token}` },
-  });
+  try {
+    const user = await fetchJson<AuthUser>(apiUrl('/api/auth/me'), {
+      headers: { Authorization: `Bearer ${token}` },
+    });
 
-  if (!res.ok) {
+    if (!user.permissions || user.permissions.length === 0) {
+      user.permissions = ROLE_PERMISSIONS_FALLBACK[user.role] || [];
+    }
+    localStorage.setItem(USER_KEY, JSON.stringify(user));
+    return user;
+  } catch (err) {
     clearStoredAuth();
-    throw new Error(`Session expired (${res.status})`);
+    throw err;
   }
-
-  const user: AuthUser = await res.json();
-  if (!user.permissions || user.permissions.length === 0) {
-    user.permissions = ROLE_PERMISSIONS_FALLBACK[user.role] || [];
-  }
-  localStorage.setItem(USER_KEY, JSON.stringify(user));
-  return user;
 }
+
 
 /**
  * Sign in using Supabase Auth (Email + Password).

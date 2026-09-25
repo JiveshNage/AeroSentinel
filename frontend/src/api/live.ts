@@ -10,20 +10,16 @@ export interface SimulateTickPayload {
   variable?: 'temperature' | 'humidity' | 'pressure' | 'wind_speed' | string;
 }
 
+import { apiUrl, fetchJson } from './client';
+
 export async function simulateStationTick(
   stationId: string,
   payload?: SimulateTickPayload
 ): Promise<TelemetryPoint> {
-  const res = await fetch(`/api/stations/${stationId}/simulate-tick`, {
+  return fetchJson<TelemetryPoint>(apiUrl(`/api/stations/${stationId}/simulate-tick`), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload || {}),
   });
-
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.detail || `Live tick simulation failed with HTTP ${res.status}`);
-  }
-
-  return res.json();
 }
+

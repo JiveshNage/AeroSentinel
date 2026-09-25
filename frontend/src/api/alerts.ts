@@ -41,6 +41,8 @@ export interface FeedbackListResponse {
   feedback: FeedbackItem[];
 }
 
+import { apiUrl, fetchJson } from './client';
+
 export async function fetchAlerts(params?: {
   status?: string;
   severity?: string;
@@ -54,26 +56,18 @@ export async function fetchAlerts(params?: {
   if (params?.limit) searchParams.set('limit', params.limit.toString());
 
   const qs = searchParams.toString();
-  const resp = await fetch(`/api/alerts${qs ? `?${qs}` : ''}`);
-  if (!resp.ok) {
-    throw new Error(`Failed to fetch alerts: HTTP ${resp.status}`);
-  }
-  return resp.json();
+  return fetchJson<AlertListResponse>(apiUrl(`/api/alerts${qs ? `?${qs}` : ''}`));
 }
 
 export async function updateAlertStatus(
   alertId: number,
   newStatus: 'acknowledged' | 'resolved',
 ): Promise<AlertItem> {
-  const resp = await fetch(`/api/alerts/${alertId}`, {
+  return fetchJson<AlertItem>(apiUrl(`/api/alerts/${alertId}`), {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ status: newStatus }),
   });
-  if (!resp.ok) {
-    throw new Error(`Failed to update alert: HTTP ${resp.status}`);
-  }
-  return resp.json();
 }
 
 export async function submitAlertFeedback(
@@ -84,15 +78,11 @@ export async function submitAlertFeedback(
     user_email?: string;
   },
 ): Promise<FeedbackItem> {
-  const resp = await fetch(`/api/alerts/${alertId}/feedback`, {
+  return fetchJson<FeedbackItem>(apiUrl(`/api/alerts/${alertId}/feedback`), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(feedback),
   });
-  if (!resp.ok) {
-    throw new Error(`Failed to submit feedback: HTTP ${resp.status}`);
-  }
-  return resp.json();
 }
 
 export async function fetchFeedbackList(params?: {
@@ -106,9 +96,6 @@ export async function fetchFeedbackList(params?: {
   if (params?.offset) searchParams.set('offset', params.offset.toString());
 
   const qs = searchParams.toString();
-  const resp = await fetch(`/api/feedback${qs ? `?${qs}` : ''}`);
-  if (!resp.ok) {
-    throw new Error(`Failed to fetch feedback: HTTP ${resp.status}`);
-  }
-  return resp.json();
+  return fetchJson<FeedbackListResponse>(apiUrl(`/api/feedback${qs ? `?${qs}` : ''}`));
 }
+

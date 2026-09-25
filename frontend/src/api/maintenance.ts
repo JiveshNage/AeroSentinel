@@ -34,6 +34,8 @@ export interface FleetMaintenanceSummary {
   ranked_predictions: MaintenancePredictionResponse[];
 }
 
+import { apiUrl, fetchJson } from './client';
+
 export async function fetchMaintenancePredictions(
   riskLevel?: string
 ): Promise<FleetMaintenanceSummary> {
@@ -41,30 +43,19 @@ export async function fetchMaintenancePredictions(
     ? `/api/maintenance/predictions?risk_level=${encodeURIComponent(riskLevel)}`
     : '/api/maintenance/predictions';
 
-  const res = await fetch(url);
-  if (!res.ok) {
-    throw new Error(`Failed to fetch maintenance predictions: HTTP ${res.status}`);
-  }
-  return res.json();
+  return fetchJson<FleetMaintenanceSummary>(apiUrl(url));
 }
 
 export async function recomputeMaintenancePredictions(): Promise<FleetMaintenanceSummary> {
-  const res = await fetch('/api/maintenance/recompute', {
+  return fetchJson<FleetMaintenanceSummary>(apiUrl('/api/maintenance/recompute'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
   });
-  if (!res.ok) {
-    throw new Error(`Failed to recompute maintenance predictions: HTTP ${res.status}`);
-  }
-  return res.json();
 }
 
 export async function fetchStationMaintenanceDetail(
   stationId: string
 ): Promise<MaintenancePredictionResponse> {
-  const res = await fetch(`/api/maintenance/stations/${encodeURIComponent(stationId)}`);
-  if (!res.ok) {
-    throw new Error(`Failed to fetch station maintenance detail: HTTP ${res.status}`);
-  }
-  return res.json();
+  return fetchJson<MaintenancePredictionResponse>(apiUrl(`/api/maintenance/stations/${encodeURIComponent(stationId)}`));
 }
+

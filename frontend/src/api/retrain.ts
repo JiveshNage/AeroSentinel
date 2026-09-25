@@ -55,12 +55,10 @@ export interface FeedbackPoolStats {
   active_model_version?: string | null;
 }
 
+import { apiUrl, fetchJson } from './client';
+
 export async function fetchRetrainStats(variable: string = 'temperature'): Promise<FeedbackPoolStats> {
-  const resp = await fetch(`/api/retrain/stats?variable=${encodeURIComponent(variable)}`);
-  if (!resp.ok) {
-    throw new Error(`Failed to fetch retraining stats: HTTP ${resp.status}`);
-  }
-  return resp.json();
+  return fetchJson<FeedbackPoolStats>(apiUrl(`/api/retrain/stats?variable=${encodeURIComponent(variable)}`));
 }
 
 export async function triggerRetraining(params?: {
@@ -68,7 +66,7 @@ export async function triggerRetraining(params?: {
   new_version?: string;
   target_false_alarm_reduction?: number;
 }): Promise<RetrainResponse> {
-  const resp = await fetch('/api/retrain/trigger', {
+  return fetchJson<RetrainResponse>(apiUrl('/api/retrain/trigger'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -77,28 +75,16 @@ export async function triggerRetraining(params?: {
       target_false_alarm_reduction: params?.target_false_alarm_reduction ?? 1.0,
     }),
   });
-  if (!resp.ok) {
-    const errorData = await resp.json().catch(() => null);
-    throw new Error(errorData?.detail || `Retraining failed: HTTP ${resp.status}`);
-  }
-  return resp.json();
 }
 
 export async function fetchRegisteredModels(variable?: string): Promise<ModelRegistryListResponse> {
   const qs = variable ? `?variable=${encodeURIComponent(variable)}` : '';
-  const resp = await fetch(`/api/retrain/models${qs}`);
-  if (!resp.ok) {
-    throw new Error(`Failed to fetch model registry: HTTP ${resp.status}`);
-  }
-  return resp.json();
+  return fetchJson<ModelRegistryListResponse>(apiUrl(`/api/retrain/models${qs}`));
 }
 
 export async function activateModelVersion(modelId: number): Promise<ModelRegistryItem> {
-  const resp = await fetch(`/api/retrain/models/${modelId}/activate`, {
+  return fetchJson<ModelRegistryItem>(apiUrl(`/api/retrain/models/${modelId}/activate`), {
     method: 'POST',
   });
-  if (!resp.ok) {
-    throw new Error(`Failed to activate model version: HTTP ${resp.status}`);
-  }
-  return resp.json();
 }
+

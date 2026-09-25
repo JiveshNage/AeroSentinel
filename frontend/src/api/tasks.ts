@@ -52,6 +52,8 @@ export interface TaskUpdatePayload {
   notes?: string;
 }
 
+import { apiUrl, fetchJson } from './client';
+
 export async function fetchTasks(params?: {
   role?: string;
   status?: string;
@@ -64,44 +66,31 @@ export async function fetchTasks(params?: {
   if (params?.priority && params.priority !== 'all') query.set('priority', params.priority);
   if (params?.station_code && params.station_code !== 'all') query.set('station_code', params.station_code);
 
-  const res = await fetch(`/api/tasks?${query.toString()}`);
-  if (!res.ok) {
-    throw new Error(`Failed to load tasks (${res.status})`);
-  }
-  return res.json();
+  return fetchJson<TaskListResponse>(apiUrl(`/api/tasks?${query.toString()}`));
 }
 
 export async function createTask(payload: TaskCreatePayload): Promise<SystemTask> {
-  const res = await fetch('/api/tasks', {
+  return fetchJson<SystemTask>(apiUrl('/api/tasks'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
   });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.detail || `Failed to create task (${res.status})`);
-  }
-  return res.json();
 }
 
 export async function updateTask(id: string, payload: TaskUpdatePayload): Promise<SystemTask> {
-  const res = await fetch(`/api/tasks/${id}`, {
+  return fetchJson<SystemTask>(apiUrl(`/api/tasks/${id}`), {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
   });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.detail || `Failed to update task (${res.status})`);
-  }
-  return res.json();
 }
 
 export async function deleteTask(id: string): Promise<void> {
-  const res = await fetch(`/api/tasks/${id}`, {
+  const res = await fetch(apiUrl(`/api/tasks/${id}`), {
     method: 'DELETE',
   });
   if (!res.ok) {
     throw new Error(`Failed to delete task (${res.status})`);
   }
 }
+

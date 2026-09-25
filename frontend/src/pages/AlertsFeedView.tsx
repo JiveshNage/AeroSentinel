@@ -29,6 +29,9 @@ import {
   fetchFeedbackList,
 } from '../api/alerts';
 import { subscribeToAlerts } from '../api/realtime';
+import { wsUrl } from '../api/client';
+
+
 import {
   fetchRetrainStats,
   triggerRetraining,
@@ -159,12 +162,10 @@ export const AlertsFeedView: React.FC<AlertsFeedViewProps> = ({ onInspectStation
     let reconnectTimer: ReturnType<typeof setTimeout>;
 
     const connect = () => {
-      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      const wsUrl = `${protocol}//${window.location.host}/api/alerts/ws`;
-
-      ws = new WebSocket(wsUrl);
+      ws = new WebSocket(wsUrl('/api/alerts/ws'));
 
       ws.onopen = () => {
+
         setWsConnected(true);
       };
 

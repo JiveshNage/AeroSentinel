@@ -26,6 +26,8 @@ export interface FileUploadResponse {
   message: string;
 }
 
+import { apiUrl, fetchJson } from './client';
+
 export async function uploadTelemetryFile(
   file: File,
   defaultStationCode?: string
@@ -36,18 +38,12 @@ export async function uploadTelemetryFile(
     formData.append('default_station_code', defaultStationCode);
   }
 
-  const res = await fetch('/api/ingest/upload-file', {
+  return fetchJson<FileUploadResponse>(apiUrl('/api/ingest/upload-file'), {
     method: 'POST',
     body: formData,
   });
-
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.detail || `Upload failed with status HTTP ${res.status}`);
-  }
-
-  return res.json();
 }
+
 
 export async function uploadRawCsvText(
   csvContent: string,

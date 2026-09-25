@@ -53,6 +53,8 @@ export interface StationDetail extends StationSummary {
   }>;
 }
 
+import { apiUrl, fetchJson } from './client';
+
 export async function fetchStations(params?: {
   state?: string;
   status?: string;
@@ -66,20 +68,11 @@ export async function fetchStations(params?: {
   }
 
   const queryString = searchParams.toString();
-  const url = `/api/stations${queryString ? `?${queryString}` : ''}`;
-  const resp = await fetch(url);
-  if (!resp.ok) {
-    throw new Error(`Failed to fetch stations: HTTP ${resp.status}`);
-  }
-  return resp.json();
+  return fetchJson<StationListResponse>(apiUrl(`/api/stations${queryString ? `?${queryString}` : ''}`));
 }
 
 export async function fetchStationDetail(stationId: string): Promise<StationDetail> {
-  const resp = await fetch(`/api/stations/${stationId}`);
-  if (!resp.ok) {
-    throw new Error(`Failed to fetch station detail: HTTP ${resp.status}`);
-  }
-  return resp.json();
+  return fetchJson<StationDetail>(apiUrl(`/api/stations/${stationId}`));
 }
 
 export interface QCVariableVerdict {
@@ -126,9 +119,6 @@ export async function fetchStationTelemetry(
   if (params?.limit) searchParams.set('limit', params.limit.toString());
 
   const qs = searchParams.toString();
-  const resp = await fetch(`/api/stations/${stationId}/telemetry${qs ? `?${qs}` : ''}`);
-  if (!resp.ok) {
-    throw new Error(`Failed to fetch station telemetry: HTTP ${resp.status}`);
-  }
-  return resp.json();
+  return fetchJson<StationTelemetryResponse>(apiUrl(`/api/stations/${stationId}/telemetry${qs ? `?${qs}` : ''}`));
 }
+
