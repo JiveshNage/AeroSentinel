@@ -1,3 +1,7 @@
+<div align="center">
+
+<img src="asset/Logo.png" alt="AeroSentinel Logo" width="220" />
+
 # 🛰️ AeroSentinel — Intelligent AWS Anomaly Detection & Quality Control
 
 > **Smart India Hackathon 2024 / Problem Statement SIH26073**  
@@ -12,6 +16,8 @@
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16_TimescaleDB-336791?style=flat&logo=postgresql&logoColor=white)](https://timescale.com)
 [![Redis](https://img.shields.io/badge/Redis-Pub%2FSub-DC382D?style=flat&logo=redis&logoColor=white)](https://redis.io)
 [![Tests](https://img.shields.io/badge/Pytest-122%20Passed-brightgreen?style=flat&logo=pytest&logoColor=white)](backend/tests)
+
+</div>
 
 ---
 
