@@ -18,6 +18,7 @@ import { DocumentationView } from './pages/DocumentationView';
 import { fetchHealth, HealthResponse } from './api/client';
 import { fetchAlerts } from './api/alerts';
 import { fetchTasks } from './api/tasks';
+import { fetchStations } from './api/stations';
 import { DEMO_USERS, getStoredUser, AuthUser, hasPermission, PermissionCode } from './api/auth';
 
 const TAB_PERMISSION_MAP: Partial<Record<AppNavTab, PermissionCode>> = {
@@ -41,7 +42,23 @@ export const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<AppNavTab>(() => {
     return currentUser?.role === 'field_technician' ? 'map' : 'dashboard';
   });
-  const [selectedStationCode, setSelectedStationCode] = useState<string>('NCR001');
+  const [selectedStationCode, setSelectedStationCode] = useState<string>('');
+
+  // Prefetch active stations to dynamically bind the selected station
+  useEffect(() => {
+    fetchStations()
+      .then((res) => {
+        if (res && res.stations && res.stations.length > 0) {
+          setSelectedStationCode((prev) => {
+            if (prev && res.stations.some((s) => s.station_code === prev)) {
+              return prev;
+            }
+            return res.stations[0].station_code;
+          });
+        }
+      })
+      .catch((err) => console.warn('Failed to prefetch station registry in App:', err));
+  }, []);
   const [healthData, setHealthData] = useState<HealthResponse | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);

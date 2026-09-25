@@ -22,20 +22,42 @@ class Settings(BaseSettings):
     SUPABASE_JWT_SECRET: Optional[str] = None
 
     CORS_ORIGINS: Union[str, List[str]] = [
-        "http://localhost:3000",
+        "https://aero-sentinel-sandy.vercel.app",
+        "https://aerosentinel.vercel.app",
         "http://localhost:5173",
-        "http://127.0.0.1:3000",
+        "http://localhost:3000",
         "http://127.0.0.1:5173",
+        "http://127.0.0.1:3000",
     ]
 
     @field_validator("CORS_ORIGINS", mode="before")
     @classmethod
     def assemble_cors_origins(cls, v: Union[str, List[str]]) -> List[str]:
+        base_origins = [
+            "https://aero-sentinel-sandy.vercel.app",
+            "https://aerosentinel.vercel.app",
+            "http://localhost:5173",
+            "http://localhost:3000",
+            "http://127.0.0.1:5173",
+            "http://127.0.0.1:3000",
+        ]
+        parsed: List[str] = []
         if isinstance(v, str) and not v.startswith("["):
-            return [i.strip() for i in v.split(",") if i.strip()]
+            for item in v.split(","):
+                cleaned = item.strip().strip("'\"").rstrip("/")
+                if cleaned and cleaned not in parsed:
+                    parsed.append(cleaned)
         elif isinstance(v, list):
-            return v
-        return []
+            for item in v:
+                cleaned = str(item).strip().strip("'\"").rstrip("/")
+                if cleaned and cleaned not in parsed:
+                    parsed.append(cleaned)
+
+        # Merge mandatory base origins if not already present
+        for b in base_origins:
+            if b not in parsed:
+                parsed.append(b)
+        return parsed
 
     model_config = SettingsConfigDict(
         env_file=".env",

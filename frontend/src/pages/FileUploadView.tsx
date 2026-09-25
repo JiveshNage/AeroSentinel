@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   UploadCloud,
   CheckCircle,
@@ -11,6 +11,7 @@ import {
   ArrowRight,
 } from 'lucide-react';
 import { uploadTelemetryFile, uploadRawCsvText, FileUploadResponse } from '../api/upload';
+import { fetchStations, StationSummary } from '../api/stations';
 import { AuthUser } from '../api/auth';
 
 interface FileUploadViewProps {
@@ -52,8 +53,23 @@ NCR007,2026-09-24T16:45:00Z,33.4,51.9,1012.3,3.2,250,0.0,710.0`,
 export const FileUploadView: React.FC<FileUploadViewProps> = ({ currentUser, onInspectStation }) => {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [defaultStation, setDefaultStation] = useState<string>('NCR001');
+  const [stationOptions, setStationOptions] = useState<StationSummary[]>([]);
   const [uploading, setUploading] = useState<boolean>(false);
   const [uploadResult, setUploadResult] = useState<FileUploadResponse | null>(null);
+
+  useEffect(() => {
+    fetchStations()
+      .then((res) => {
+        if (res && res.stations && res.stations.length > 0) {
+          setStationOptions(res.stations);
+          setDefaultStation((prev) => {
+            if (prev && res.stations.some((s) => s.station_code === prev)) return prev;
+            return res.stations[0].station_code;
+          });
+        }
+      })
+      .catch(() => {});
+  }, []);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isDragOver, setIsDragOver] = useState<boolean>(false);
 
@@ -238,11 +254,21 @@ export const FileUploadView: React.FC<FileUploadViewProps> = ({ currentUser, onI
                   onChange={(e) => setDefaultStation(e.target.value)}
                   className="bg-surface border border-line rounded px-2.5 py-1 text-ink focus:outline-none cursor-pointer text-xs"
                 >
-                  <option value="NCR001">NCR001 — Delhi Safdarjung</option>
-                  <option value="NCR002">NCR002 — Gurugram</option>
-                  <option value="NCR003">NCR003 — Noida</option>
-                  <option value="NCR005">NCR005 — Ghaziabad</option>
-                  <option value="NCR010">NCR010 — Alwar</option>
+                  {stationOptions.length > 0 ? (
+                    stationOptions.map((st) => (
+                      <option key={st.station_code} value={st.station_code}>
+                        {st.station_code} — {st.name}
+                      </option>
+                    ))
+                  ) : (
+                    <>
+                      <option value="NCR001">NCR001 — Delhi Safdarjung</option>
+                      <option value="NCR002">NCR002 — Gurugram</option>
+                      <option value="NCR003">NCR003 — Noida</option>
+                      <option value="NCR005">NCR005 — Ghaziabad</option>
+                      <option value="NCR010">NCR010 — Alwar</option>
+                    </>
+                  )}
                 </select>
               </div>
 

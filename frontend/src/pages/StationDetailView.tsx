@@ -26,7 +26,7 @@ interface StationDetailViewProps {
 }
 
 export const StationDetailView: React.FC<StationDetailViewProps> = ({
-  initialStationCode = 'NCR001',
+  initialStationCode = '',
   onBackToMap,
 }) => {
   const [stationList, setStationList] = useState<StationSummary[]>([]);
@@ -38,15 +38,33 @@ export const StationDetailView: React.FC<StationDetailViewProps> = ({
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Load all stations for dropdown switcher
+  // Load all stations for dropdown switcher and bind first available if not set
   useEffect(() => {
     fetchStations()
-      .then((res) => setStationList(res.stations))
+      .then((res) => {
+        const list = res?.stations || [];
+        setStationList(list);
+        if (list.length > 0) {
+          setCurrentStationCode((prev) => {
+            if (prev && list.some((s) => s.station_code === prev)) {
+              return prev;
+            }
+            if (initialStationCode && list.some((s) => s.station_code === initialStationCode)) {
+              return initialStationCode;
+            }
+            return list[0].station_code;
+          });
+        }
+      })
       .catch((err) => console.error('Failed to load station list:', err));
-  }, []);
+  }, [initialStationCode]);
 
   // Load selected station detail and telemetry
   const loadStationData = useCallback(async () => {
+    if (!currentStationCode) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     setError(null);
     try {
@@ -55,7 +73,7 @@ export const StationDetailView: React.FC<StationDetailViewProps> = ({
         fetchStationTelemetry(currentStationCode, { limit: timeRangeLimit }),
       ]);
       setStationDetail(detail);
-      setTelemetry(telemRes.telemetry);
+      setTelemetry(telemRes.telemetry || []);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Failed to load telemetry data';
       setError(msg);

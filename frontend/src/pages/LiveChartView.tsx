@@ -30,7 +30,7 @@ interface LiveChartViewProps {
 }
 
 export const LiveChartView: React.FC<LiveChartViewProps> = ({
-  initialStationCode = 'NCR001',
+  initialStationCode = '',
   onInspectStation,
 }) => {
   const [stations, setStations] = useState<StationSummary[]>([]);
@@ -46,30 +46,50 @@ export const LiveChartView: React.FC<LiveChartViewProps> = ({
 
   const streamTimerRef = useRef<any>(null);
 
-  // Load registered stations list
+  // Load registered stations list and select first available station
   useEffect(() => {
     fetchStations()
       .then((res) => {
-        setStations(res.stations);
-        if (res.stations.length > 0 && !res.stations.some((s) => s.station_code === selectedStation)) {
-          setSelectedStation(res.stations[0].station_code);
+        const list = res?.stations || [];
+        setStations(list);
+        if (list.length > 0) {
+          setSelectedStation((prev) => {
+            if (prev && list.some((s) => s.station_code === prev)) {
+              return prev;
+            }
+            if (initialStationCode && list.some((s) => s.station_code === initialStationCode)) {
+              return initialStationCode;
+            }
+            return list[0].station_code;
+          });
         }
       })
-      .catch(() => {});
-  }, [selectedStation]);
+      .catch((err) => {
+        console.error('Failed to load station registry in LiveChartView:', err);
+      });
+  }, [initialStationCode]);
 
   // Initial load of telemetry history for selected station
   const loadInitialTelemetry = useCallback(async () => {
+    if (!selectedStation) {
+      setLoading(false);
+      return;
+    }
+    // Only query if station list has been retrieved and selectedStation is valid
+    if (stations.length > 0 && !stations.some((s) => s.station_code === selectedStation)) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
       const res = await fetchStationTelemetry(selectedStation, { limit: bufferLimit });
-      setPoints(res.telemetry);
+      setPoints(res.telemetry || []);
     } catch (err) {
       console.error('Failed to load telemetry:', err);
     } finally {
       setLoading(false);
     }
-  }, [selectedStation, bufferLimit]);
+  }, [selectedStation, bufferLimit, stations]);
 
   useEffect(() => {
     loadInitialTelemetry();
@@ -89,9 +109,11 @@ export const LiveChartView: React.FC<LiveChartViewProps> = ({
     });
   }, [bufferLimit]);
 
-  // Generate / Fetch next simulated real-time tick
+  // Generate / Fetch next simulated real-time tick for confirmed existing station
   const triggerTick = useCallback(
     async (forceAnomaly: boolean = false) => {
+      if (!selectedStation) return;
+      if (stations.length > 0 && !stations.some((s) => s.station_code === selectedStation)) return;
       const startTime = performance.now();
       try {
         const point = await simulateStationTick(selectedStation, {
@@ -106,12 +128,12 @@ export const LiveChartView: React.FC<LiveChartViewProps> = ({
         console.error('Tick simulation error:', err);
       }
     },
-    [selectedStation, selectedVariable, appendTelemetryPoint]
+    [selectedStation, selectedVariable, appendTelemetryPoint, stations]
   );
 
   // Live streaming interval loop
   useEffect(() => {
-    if (!isStreaming) {
+    if (!isStreaming || !selectedStation) {
       if (streamTimerRef.current) clearInterval(streamTimerRef.current);
       return;
     }
@@ -123,7 +145,7 @@ export const LiveChartView: React.FC<LiveChartViewProps> = ({
     return () => {
       if (streamTimerRef.current) clearInterval(streamTimerRef.current);
     };
-  }, [isStreaming, streamIntervalMs, triggerTick]);
+  }, [isStreaming, streamIntervalMs, triggerTick, selectedStation]);
 
   // Inject Anomaly Button Handler
   const handleInjectAnomaly = async () => {

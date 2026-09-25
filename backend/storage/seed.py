@@ -74,6 +74,144 @@ ADDITIONAL_STATIONS = [
     },
 ]
 
+DEFAULT_NCR_STATIONS = [
+    {
+        "station_code": "NCR001",
+        "name": "Delhi (Safdarjung)",
+        "latitude": 28.5822,
+        "longitude": 77.2066,
+        "elevation_m": 216.0,
+        "state": "Delhi",
+        "district": "New Delhi",
+    },
+    {
+        "station_code": "NCR002",
+        "name": "Gurugram",
+        "latitude": 28.4595,
+        "longitude": 77.0266,
+        "elevation_m": 217.0,
+        "state": "Haryana",
+        "district": "Gurugram",
+    },
+    {
+        "station_code": "NCR003",
+        "name": "Noida",
+        "latitude": 28.5355,
+        "longitude": 77.3910,
+        "elevation_m": 201.0,
+        "state": "Uttar Pradesh",
+        "district": "Gautam Buddh Nagar",
+    },
+    {
+        "station_code": "NCR004",
+        "name": "Faridabad",
+        "latitude": 28.4089,
+        "longitude": 77.3178,
+        "elevation_m": 201.0,
+        "state": "Haryana",
+        "district": "Faridabad",
+    },
+    {
+        "station_code": "NCR005",
+        "name": "Ghaziabad",
+        "latitude": 28.6692,
+        "longitude": 77.4538,
+        "elevation_m": 214.0,
+        "state": "Uttar Pradesh",
+        "district": "Ghaziabad",
+    },
+    {
+        "station_code": "NCR006",
+        "name": "Meerut",
+        "latitude": 28.9845,
+        "longitude": 77.7064,
+        "elevation_m": 219.0,
+        "state": "Uttar Pradesh",
+        "district": "Meerut",
+    },
+    {
+        "station_code": "NCR007",
+        "name": "Rohtak",
+        "latitude": 28.8955,
+        "longitude": 76.6066,
+        "elevation_m": 219.0,
+        "state": "Haryana",
+        "district": "Rohtak",
+    },
+    {
+        "station_code": "NCR008",
+        "name": "Panipat",
+        "latitude": 29.3909,
+        "longitude": 76.9635,
+        "elevation_m": 219.0,
+        "state": "Haryana",
+        "district": "Panipat",
+    },
+    {
+        "station_code": "NCR009",
+        "name": "Bulandshahr",
+        "latitude": 28.4041,
+        "longitude": 77.8498,
+        "elevation_m": 188.0,
+        "state": "Uttar Pradesh",
+        "district": "Bulandshahr",
+    },
+    {
+        "station_code": "NCR010",
+        "name": "Alwar",
+        "latitude": 27.5530,
+        "longitude": 76.6346,
+        "elevation_m": 268.0,
+        "state": "Rajasthan",
+        "district": "Alwar",
+    },
+    {
+        "station_code": "NCR011",
+        "name": "Sonipat",
+        "latitude": 28.9931,
+        "longitude": 77.0151,
+        "elevation_m": 220.0,
+        "state": "Haryana",
+        "district": "Sonipat",
+    },
+    {
+        "station_code": "NCR012",
+        "name": "Palwal",
+        "latitude": 28.1447,
+        "longitude": 77.3272,
+        "elevation_m": 201.0,
+        "state": "Haryana",
+        "district": "Palwal",
+    },
+    {
+        "station_code": "NCR013",
+        "name": "Bharatpur",
+        "latitude": 27.2152,
+        "longitude": 77.4909,
+        "elevation_m": 178.0,
+        "state": "Rajasthan",
+        "district": "Bharatpur",
+    },
+    {
+        "station_code": "NCR014",
+        "name": "Baghpat",
+        "latitude": 28.9448,
+        "longitude": 77.2183,
+        "elevation_m": 225.0,
+        "state": "Uttar Pradesh",
+        "district": "Baghpat",
+    },
+    {
+        "station_code": "NCR015",
+        "name": "Jhajjar",
+        "latitude": 28.6100,
+        "longitude": 76.6565,
+        "elevation_m": 220.0,
+        "state": "Haryana",
+        "district": "Jhajjar",
+    },
+]
+
 
 def load_stations_csv(csv_path: Path) -> List[Dict[str, Any]]:
     stations = []
@@ -105,10 +243,13 @@ def seed_database(db: Session = None) -> int:
         Base.metadata.create_all(bind=engine)
 
         # 1. Locate stations.csv
-        workspace_root = Path(__file__).resolve().parent.parent.parent
+        storage_dir = Path(__file__).resolve().parent
+        workspace_root = storage_dir.parent.parent
         csv_candidates = [
+            storage_dir / "stations.csv",
             workspace_root / "Dataset" / "stations.csv",
             workspace_root / "data" / "stations.csv",
+            storage_dir.parent / "data" / "stations.csv",
         ]
         csv_path = None
         for cand in csv_candidates:
@@ -120,11 +261,18 @@ def seed_database(db: Session = None) -> int:
         if csv_path:
             stations_to_seed.extend(load_stations_csv(csv_path))
 
-        # Add additional stations to ensure >= 20 stations
+        # Ensure all default NCR stations exist (guarantees NCR001-NCR015 even without CSV)
         existing_codes = {s["station_code"] for s in stations_to_seed}
+        for ncr_default in DEFAULT_NCR_STATIONS:
+            if ncr_default["station_code"] not in existing_codes:
+                stations_to_seed.append(ncr_default)
+                existing_codes.add(ncr_default["station_code"])
+
+        # Add additional stations to ensure >= 20 stations
         for extra in ADDITIONAL_STATIONS:
             if extra["station_code"] not in existing_codes:
                 stations_to_seed.append(extra)
+                existing_codes.add(extra["station_code"])
 
         # 2. Insert or update stations
         seeded_count = 0

@@ -13,6 +13,7 @@ import {
   Trash2,
 } from 'lucide-react';
 import { fetchTasks, createTask, updateTask, deleteTask, SystemTask } from '../api/tasks';
+import { fetchStations } from '../api/stations';
 import { AuthUser } from '../api/auth';
 
 interface TasksViewProps {
@@ -70,6 +71,19 @@ export const TasksView: React.FC<TasksViewProps> = ({ currentUser, onInspectStat
   const [newTaskStation, setNewTaskStation] = useState<string>('NCR001');
   const [newTaskDueDate, setNewTaskDueDate] = useState<string>('');
   const [creating, setCreating] = useState<boolean>(false);
+
+  useEffect(() => {
+    fetchStations()
+      .then((res) => {
+        if (res && res.stations && res.stations.length > 0) {
+          setNewTaskStation((prev) => {
+            if (prev && res.stations.some((s) => s.station_code === prev)) return prev;
+            return res.stations[0].station_code;
+          });
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   const activeRole = currentUser?.role || 'admin';
   const isAdmin = activeRole === 'admin';
